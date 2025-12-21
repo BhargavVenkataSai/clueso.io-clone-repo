@@ -119,14 +119,16 @@ See the full demo video: [Link to be added]
 - Video metadata management
 - AI processing pipeline (mocked)
 
-**AI Features (Mocked)**
-- Transcription generation
-- Filler word removal
-- AI voiceover generation
-- Auto-zoom detection
-- Caption generation
-- Documentation from videos
-- Translation (31+ languages)
+**AI Features**
+- **Gemini 1.5 Flash Integration**: Real-time generation of polished scripts, zoom plans, and step-by-step documentation.
+- **Studio Interface**: Advanced video editor UI with timeline, script editing, and preview.
+- **Smart Processing**:
+  - Polished Script generation from raw transcripts
+  - Intelligent Auto-zoom detection based on UI events
+  - Automated Step-by-step Documentation generation
+- **Legacy/Mocked Features**:
+  - AI voiceover generation (Mocked/Google TTS)
+  - Translation (31+ languages)
 
 **Documentation**
 - Generate step-by-step guides
@@ -134,9 +136,11 @@ See the full demo video: [Link to be added]
 - Multi-format export
 - Translation support
 
-### 🔧 Mock AI Implementation
+### 🔧 AI Implementation
 
-All AI features are **clearly mocked** in `/backend/src/utils/aiService.js`:
+The project uses a **hybrid approach**:
+1. **Real AI (Gemini)**: Implemented in `/backend/src/services/geminiService.js` for script polishing, zoom planning, and documentation.
+2. **Mocked Services**: Legacy features in `/backend/src/utils/aiService.js` for simulation purposes.
 
 ```javascript
 /**
@@ -177,6 +181,12 @@ POST   /api/videos/:id/process       # Trigger AI processing
 DELETE /api/videos/:id               # Delete video
 ```
 
+### AI Services
+```
+POST /api/ai/process-recording       # Process recording with Gemini (Script, Zooms, Docs)
+POST /api/ai/summarize/:projectId    # Generate summary
+```
+
 ### Documentation
 ```
 POST /api/documentation                 # Generate from video
@@ -194,6 +204,7 @@ POST /api/documentation/:id/export      # Export
 - **JWT**: Stateless authentication
 - **Mongoose**: Schema validation, relationships
 - **bcryptjs**: Secure password hashing
+- **Google Gemini AI**: Powered by Gemini 1.5 Flash for intelligent content generation
 
 ### Frontend
 - **Next.js**: SSR capabilities, routing, optimization

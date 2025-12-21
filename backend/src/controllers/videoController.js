@@ -20,6 +20,36 @@ const upload = multer({ storage: storage });
 
 const { processAudio } = require('../services/audioService');
 
+const Video = require('../models/Video');
+
+/**
+ * @route   GET /api/videos
+ * @desc    Get all videos for a workspace
+ * @access  Private
+ */
+const getVideos = async (req, res) => {
+  try {
+    const { workspaceId } = req.query;
+
+    if (!workspaceId) {
+      return res.status(400).json({ success: false, error: 'Workspace ID is required' });
+    }
+
+    const videos = await Video.find({ workspace: workspaceId })
+      .sort({ createdAt: -1 })
+      .populate('creator', 'name email');
+
+    res.status(200).json({
+      success: true,
+      count: videos.length,
+      data: videos
+    });
+  } catch (error) {
+    console.error('Get videos error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch videos' });
+  }
+};
+
 /**
  * @route   POST /api/videos/upload
  * @desc    Upload a video file
@@ -156,9 +186,60 @@ const processAudioFull = async (req, res) => {
     }
 }
 
+// const { processAudio } = require('../services/audioService'); // Removed duplicate
+const aiService = require('../utils/aiService'); // Import the main aiService
+// ...
+
+/**
+ * @route   POST /api/videos/process-ai
+ * @desc    Run full AI analysis (Script, Docs, Zooms) using Gemini
+ * @access  Private
+ */
+const processVideoAI = async (req, res) => {
+    try {
+        const { 
+            raw_transcript, 
+            ui_events, 
+            video_metadata, 
+            style_guidelines, 
+            doc_use_case 
+        } = req.body;
+
+        // Basic validation
+        if (!raw_transcript && !ui_events) {
+             return res.status(400).json({ success: false, error: 'Missing transcript or UI events data.' });
+        }
+
+        console.log("API: Requesting Advanced AI Processing...");
+
+        const result = await aiService.processVideoAdvanced({
+             raw_transcript: raw_transcript || "No transcript provided.",
+             ui_events: ui_events || [],
+             video_metadata: video_metadata || { duration: 60 },
+             style_guidelines: style_guidelines || "Professional, concise",
+             doc_use_case: doc_use_case || "User Tutorial"
+        });
+
+        if (!result.success) {
+            return res.status(500).json({ success: false, error: result.error });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: result.data
+        });
+
+    } catch (error) {
+        console.error("Controller Error:", error);
+        res.status(500).json({ success: false, error: 'Server error during AI processing' });
+    }
+};
+
 module.exports = {
+  getVideos,
   upload,
   uploadVideo,
   generateTTS,
-  processAudioFull
+  processAudioFull,
+  processVideoAI
 };

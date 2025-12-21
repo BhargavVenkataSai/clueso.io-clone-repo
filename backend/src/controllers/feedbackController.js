@@ -71,7 +71,9 @@ const createFeedback = async (req, res) => {
  */
 const getFeedbacks = async (req, res) => {
   try {
-    const { projectId, status, category } = req.query;
+    const { status, category } = req.query;
+    // Support both params (route /project/:projectId) and query (?projectId=...)
+    const projectId = req.params.projectId || req.query.projectId;
 
     if (!projectId) {
       return res.status(400).json({

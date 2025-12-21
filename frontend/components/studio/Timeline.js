@@ -1,4 +1,4 @@
-export default function Timeline() {
+export default function Timeline({ tracks = [] }) {
     return (
         <div className="h-full flex flex-col">
             {/* Timeline Tools */}
@@ -30,31 +30,34 @@ export default function Timeline() {
 
                  {/* Tracks */}
                  <div className="space-y-2 w-[2000px]">
-                     {/* Track 1: Scene/Video */}
-                     <div className="h-12 bg-gray-800/30 rounded flex items-center relative">
-                         <div className="absolute left-0 w-6 h-full bg-gray-700 flex items-center justify-center border-r border-gray-600 rounded-l cursor-not-allowed">
-                             <span className="text-[10px] text-gray-400 rotate-90">Video</span>
-                         </div>
-                         <div className="ml-8 h-10 w-64 bg-cyan-900/50 border border-cyan-500/50 rounded flex items-center justify-center text-cyan-200 text-xs truncate px-2">
-                             Stock_Footage.mp4
-                         </div>
-                         <div className="ml-2 h-10 w-48 bg-cyan-900/50 border border-cyan-500/50 rounded flex items-center justify-center text-cyan-200 text-xs truncate px-2">
-                             Gameplay_Verify.mp4
-                         </div>
-                     </div>
-
-                     {/* Track 2: Audio/TTS */}
-                     <div className="h-12 bg-gray-800/30 rounded flex items-center relative">
-                         <div className="absolute left-0 w-6 h-full bg-gray-700 flex items-center justify-center border-r border-gray-600 rounded-l cursor-not-allowed">
-                             <span className="text-[10px] text-gray-400 rotate-90">Audio</span>
-                         </div>
-                          <div className="ml-8 h-10 w-32 bg-purple-900/50 border border-purple-500/50 rounded flex items-center justify-center text-purple-200 text-xs truncate px-2">
-                             Intro Speech (Jessica)
-                         </div>
-                         <div className="ml-36 h-10 w-40 bg-purple-900/50 border border-purple-500/50 rounded flex items-center justify-center text-purple-200 text-xs truncate px-2">
-                             Main Content
-                         </div>
-                     </div>
+                     {tracks.length === 0 && (
+                        <div className="text-gray-500 text-xs p-4 italic">No tracks added yet.</div>
+                     )}
+                     
+                     {tracks.map((track) => (
+                        <div key={track.id} className="h-12 bg-gray-800/30 rounded flex items-center relative">
+                            <div className="absolute left-0 w-6 h-full bg-gray-700 flex items-center justify-center border-r border-gray-600 rounded-l cursor-not-allowed">
+                                <span className="text-[10px] text-gray-400 rotate-90 capitalize">{track.type}</span>
+                            </div>
+                            
+                            {track.items.map((item) => (
+                                <div 
+                                    key={item.id}
+                                    className={`absolute h-10 border rounded flex items-center justify-center text-xs truncate px-2 cursor-pointer hover:brightness-110 transition
+                                        ${track.type === 'video' ? 'bg-cyan-900/50 border-cyan-500/50 text-cyan-200' : ''}
+                                        ${track.type === 'audio' ? 'bg-purple-900/50 border-purple-500/50 text-purple-200' : ''}
+                                    `}
+                                    style={{ 
+                                        left: `${(item.startTime || 0) * 100}px`, // Scale: 100px per second (example)
+                                        width: `${(item.duration || 2) * 100}px` 
+                                    }}
+                                    title={item.name}
+                                >
+                                    {item.name}
+                                </div>
+                            ))}
+                        </div>
+                     ))}
                  </div>
 
                  {/* Playhead */}

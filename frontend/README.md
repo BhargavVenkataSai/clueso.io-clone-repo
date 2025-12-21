@@ -16,6 +16,8 @@ AI-powered video creation platform (Clueso.io functional clone).
 - Landing page (Clueso.io style)
 - Dashboard with workspace management
 - Video listing and creation
+- **Studio Interface**: Advanced editor with timeline and script panel
+- **AI Integration**: Gemini-powered script polishing and zoom planning
 - Responsive design
 - Clean, modern UI
 
@@ -24,7 +26,8 @@ AI-powered video creation platform (Clueso.io functional clone).
 - `/signup` - User registration
 - `/login` - User login
 - `/dashboard` - Main dashboard with workspaces and videos
-- `/videos/[id]` - Video editor (to be implemented)
+- `/projects/[id]` - Studio Editor (Active)
+- `/videos/[id]` - Video editor (Legacy)
 
 ## Setup
 

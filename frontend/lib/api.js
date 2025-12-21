@@ -88,6 +88,12 @@ export const ragAPI = {
   generateScript: (data) => api.post('/rag/generate-script', data),
 };
 
+// AI API
+export const aiAPI = {
+  summarizeProject: (projectId) => api.post(`/ai/summarize/${projectId}`),
+  processRecording: (data) => api.post('/ai/process-recording', data),
+};
+
 // Documentation API
 export const documentationAPI = {
   generate: (data) => api.post('/documentation', data),
@@ -108,9 +114,6 @@ export const feedbackAPI = {
   analyze: (id) => api.post(`/feedback/${id}/analyze`),
 };
 
-// AI API
-export const aiAPI = {
-  summarizeProject: (projectId) => api.post(`/ai/summarize/${projectId}`),
-};
+
 
 export default api;

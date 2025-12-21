@@ -9,6 +9,7 @@ src/
 ├── config/         # Configuration files (DB, environment)
 ├── models/         # Mongoose schemas (User, Workspace, Video, Documentation, Template)
 ├── controllers/    # Business logic handlers
+├── services/       # External services (Gemini AI)
 ├── routes/         # API route definitions
 ├── middleware/     # Auth, validation, error handling
 ├── utils/          # Helper functions (AI mock service, JWT)
@@ -43,6 +44,10 @@ src/
 - `PUT /api/videos/:id` - Update video settings
 - `POST /api/videos/:id/process` - Trigger AI processing
 - `DELETE /api/videos/:id` - Delete video
+
+### AI Services
+- `POST /api/ai/process-recording` - Process recording with Gemini
+- `POST /api/ai/summarize/:projectId` - Generate summary
 
 ### Documentation
 - `POST /api/documentation` - Generate docs from video

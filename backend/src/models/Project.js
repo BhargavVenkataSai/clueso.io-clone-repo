@@ -98,7 +98,26 @@ const projectSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
-  }
+  },
+  // AI Generated Content
+  polishedScript: {
+    type: String,
+    default: ''
+  },
+  docSteps: [{
+    step: Number,
+    description: String,
+    timestamp: Number
+  }],
+  zoomPlan: [{
+    timestamp: Number,
+    zoom_level: Number,
+    focus_point: {
+      x: Number,
+      y: Number
+    },
+    reason: String
+  }]
 }, {
   timestamps: true
 });
