@@ -31,10 +31,12 @@ export default function ProjectStudio() {
   const [timelineClips, setTimelineClips] = useState([
       { id: 1, type: 'video', name: 'Slide 1', duration: 5, start: 0, color: 'bg-gray-700' }
   ]);
+  const [audioClips, setAudioClips] = useState([]);
   const [selectedClipId, setSelectedClipId] = useState(null);
   const [activeModal, setActiveModal] = useState(null); // 'import-project'
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [isProcessingAudio, setIsProcessingAudio] = useState(false);
 
   // Mock Timeline State
   const [currentTime, setCurrentTime] = useState(0);
@@ -52,6 +54,19 @@ export default function ProjectStudio() {
 
   // Derived State for Preview
   const activeClip = timelineClips.find(clip => currentTime >= clip.start && currentTime < clip.start + clip.duration) || timelineClips[0];
+
+  const handleAddAudio = (audioData) => {
+      const newClip = {
+          id: Date.now(),
+          type: 'audio',
+          name: `Voiceover - ${audioData.text.substring(0, 10)}...`,
+          src: audioData.url,
+          duration: audioData.duration,
+          start: currentTime,
+          color: 'bg-purple-600'
+      };
+      setAudioClips([...audioClips, newClip]);
+  };
 
   const handleAddClip = (type) => {
       const newClip = {
@@ -75,10 +90,12 @@ export default function ProjectStudio() {
   const handleFileUpload = (e) => {
       const file = e.target.files[0];
       if (file) {
+          const objectUrl = URL.createObjectURL(file);
           const newClip = {
               id: Date.now(),
-              type: 'video',
+              type: file.type.startsWith('video') ? 'video' : 'image',
               name: file.name,
+              src: objectUrl,
               duration: 10, // Mock duration
               start: timelineClips.length > 0 ? timelineClips[timelineClips.length - 1].start + timelineClips[timelineClips.length - 1].duration : 0,
               color: 'bg-purple-900'
@@ -100,15 +117,21 @@ export default function ProjectStudio() {
       if (clipIndex === -1) return;
 
       const clip = timelineClips[clipIndex];
-      // Simple split logic: split in half for demo
-      const splitPoint = clip.duration / 2;
       
-      const clip1 = { ...clip, duration: splitPoint };
+      // Calculate split point relative to clip start
+      const relativeSplitPoint = currentTime - clip.start;
+
+      // Validate split point (must be within the clip, with some buffer)
+      if (relativeSplitPoint <= 0.1 || relativeSplitPoint >= clip.duration - 0.1) {
+          return; // Too close to edge
+      }
+      
+      const clip1 = { ...clip, duration: relativeSplitPoint };
       const clip2 = { 
           ...clip, 
           id: Date.now(), 
-          start: clip.start + splitPoint, 
-          duration: clip.duration - splitPoint,
+          start: clip.start + relativeSplitPoint, 
+          duration: clip.duration - relativeSplitPoint,
           name: `${clip.name} (Part 2)`
       };
 
@@ -314,6 +337,10 @@ export default function ProjectStudio() {
                         <ScriptPanel 
                             projectId={id} 
                             initialScript={project?.polishedScript}
+                            currentTime={currentTime}
+                            isPlaying={isPlaying}
+                            onAddAudio={handleAddAudio}
+                            setGenerating={setIsProcessingAudio}
                         />
                     )}
                     {activeTab !== 'script' && (
@@ -484,7 +511,23 @@ export default function ProjectStudio() {
                  </div>
 
                 {/* Video Preview Canvas */}
-                <div className="flex-1 flex items-center justify-center p-8 overflow-hidden">
+                <div className="flex-1 flex items-center justify-center p-8 overflow-hidden relative">
+                    {/* Loading Overlay */}
+                    {isProcessingAudio && (
+                        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
+                            <div className="bg-[#1a1d21] p-6 rounded-xl border border-gray-700 shadow-2xl flex flex-col items-center space-y-4">
+                                <div className="relative w-16 h-16">
+                                    <div className="absolute inset-0 border-4 border-gray-700 rounded-full"></div>
+                                    <div className="absolute inset-0 border-4 border-pink-500 rounded-full border-t-transparent animate-spin"></div>
+                                </div>
+                                <div className="text-center">
+                                    <h3 className="text-white font-bold text-lg">Generating Speech</h3>
+                                    <p className="text-gray-400 text-sm">AI is synthesizing voiceover...</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex space-x-4 w-full max-w-6xl h-full items-center justify-center">
                         {/* Video Player Container */}
                         <div 
@@ -503,15 +546,28 @@ export default function ProjectStudio() {
                                 {activeClip ? (
                                     <div className="w-full h-full flex items-center justify-center bg-black">
                                         {activeClip.type === 'video' && (
-                                            <div className="text-center">
-                                                <div className={`w-32 h-32 mx-auto mb-4 rounded-lg flex items-center justify-center ${activeClip.color || 'bg-gray-800'}`}>
-                                                    <svg className="w-12 h-12 text-white opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                            activeClip.src ? (
+                                                <video 
+                                                    src={activeClip.src} 
+                                                    className="w-full h-full object-contain"
+                                                    ref={(el) => {
+                                                        if (el) {
+                                                            el.currentTime = Math.max(0, currentTime - activeClip.start);
+                                                            if (isPlaying) el.play(); else el.pause();
+                                                        }
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div className="text-center">
+                                                    <div className={`w-32 h-32 mx-auto mb-4 rounded-lg flex items-center justify-center ${activeClip.color || 'bg-gray-800'}`}>
+                                                        <svg className="w-12 h-12 text-white opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                                    </div>
+                                                    <h3 className="text-xl font-bold text-white">{activeClip.name}</h3>
+                                                    <p className="text-gray-400 text-sm mt-2">
+                                                        Time: {Math.floor(currentTime)}s / Duration: {activeClip.duration}s
+                                                    </p>
                                                 </div>
-                                                <h3 className="text-xl font-bold text-white">{activeClip.name}</h3>
-                                                <p className="text-gray-400 text-sm mt-2">
-                                                    Time: {Math.floor(currentTime)}s / Duration: {activeClip.duration}s
-                                                </p>
-                                            </div>
+                                            )
                                         )}
                                         {activeClip.type === 'image' && (
                                             <img src={activeClip.src || "/placeholder.png"} alt={activeClip.name} className="max-w-full max-h-full object-contain" />
@@ -539,6 +595,29 @@ export default function ProjectStudio() {
                                 >
                                     {el.type === 'Text' ? el.content : el.type}
                                 </div>
+                            ))}
+
+                            {/* Audio Players (Hidden) */}
+                            {audioClips.map(clip => (
+                                <audio
+                                    key={clip.id}
+                                    src={clip.src}
+                                    ref={el => {
+                                        if (el) {
+                                            const relativeTime = currentTime - clip.start;
+                                            if (isPlaying && relativeTime >= 0 && relativeTime < clip.duration) {
+                                                if (el.paused) {
+                                                    el.currentTime = relativeTime;
+                                                    el.play().catch(e => console.error("Audio play failed", e));
+                                                } else if (Math.abs(el.currentTime - relativeTime) > 0.5) {
+                                                     el.currentTime = relativeTime;
+                                                }
+                                            } else {
+                                                if (!el.paused) el.pause();
+                                            }
+                                        }
+                                    }}
+                                />
                             ))}
 
                             {/* Zoom Markers Overlay */}
@@ -674,53 +753,71 @@ export default function ProjectStudio() {
 
                          <div className="flex items-center space-x-4">
                              <button 
-                                onClick={handleUndo}
-                                disabled={historyIndex <= 0}
-                                className="p-1.5 rounded-full bg-[#23232f] text-gray-300 hover:text-white disabled:opacity-30"
+                                onClick={() => setCurrentTime(Math.max(0, currentTime - 5))}
+                                className="p-1.5 rounded-full text-gray-400 hover:text-white hover:bg-white/10"
+                                title="Skip Back 5s"
                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" /></svg>
                              </button>
+
                              <button 
                                 onClick={() => setIsPlaying(!isPlaying)}
-                                className="p-2 rounded-full bg-pink-600 text-white hover:bg-pink-500 shadow-lg"
+                                className="p-3 rounded-full bg-pink-600 text-white hover:bg-pink-500 shadow-lg transform hover:scale-105 transition flex items-center justify-center"
                              >
                                 {isPlaying ? (
-                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
                                 ) : (
-                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                                 )}
                              </button>
+
                              <button 
-                                onClick={handleRedo}
-                                disabled={historyIndex >= history.length - 1}
-                                className="p-1.5 rounded-full bg-[#23232f] text-gray-300 hover:text-white disabled:opacity-30"
+                                onClick={() => setCurrentTime(Math.min(duration, currentTime + 5))}
+                                className="p-1.5 rounded-full text-gray-400 hover:text-white hover:bg-white/10"
+                                title="Skip Forward 5s"
                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" /></svg>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
                              </button>
-                             <span className="text-xs font-mono text-gray-400">00:00:00 / 00:05:00</span>
+
+                             <span className="text-xs font-mono text-gray-400 min-w-[100px] text-center">
+                                {new Date(currentTime * 1000).toISOString().substr(11, 8)} / {new Date(duration * 1000).toISOString().substr(11, 8)}
+                             </span>
                          </div>
 
-                         <div className="flex items-center space-x-2 w-32">
+                         <div className="flex items-center space-x-3">
+                             <div className="flex items-center bg-[#23232f] rounded-lg p-0.5">
+                                 <button 
+                                    onClick={handleUndo}
+                                    disabled={historyIndex <= 0}
+                                    className="p-1.5 rounded text-gray-400 hover:text-white disabled:opacity-30 hover:bg-white/5"
+                                    title="Undo"
+                                 >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                                 </button>
+                                 <div className="w-px h-4 bg-gray-700 mx-1"></div>
+                                 <button 
+                                    onClick={handleRedo}
+                                    disabled={historyIndex >= history.length - 1}
+                                    className="p-1.5 rounded text-gray-400 hover:text-white disabled:opacity-30 hover:bg-white/5"
+                                    title="Redo"
+                                 >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" /></svg>
+                                 </button>
+                             </div>
 
-                                 {/* Zoom Markers on Track */}
-                                 {zoomPlan.map((zoom, idx) => (
-                                     <div 
-                                        key={idx}
-                                        className="absolute top-0 bottom-0 w-0.5 bg-yellow-500 z-10"
-                                        style={{ left: `${(zoom.timestamp / duration) * 100}%` }}
-                                     >
-                                         <div className="absolute -top-1 -left-1 w-2 h-2 bg-yellow-500 rounded-full"></div>
-                                     </div>
-                                 ))}
-                             <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-                             <input 
-                                type="range" 
-                                min="10" max="100" 
-                                value={zoomLevel} 
-                                onChange={(e) => setZoomLevel(e.target.value)}
-                                className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-pink-500"
-                             />
-                             <span className="text-xs text-gray-500">{zoomLevel}%</span>
+                             <div className="w-px h-6 bg-gray-800"></div>
+
+                             <div className="flex items-center space-x-2 w-32">
+                                 <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
+                                 <input 
+                                    type="range" 
+                                    min="10" max="100" 
+                                    value={zoomLevel} 
+                                    onChange={(e) => setZoomLevel(e.target.value)}
+                                    className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-pink-500"
+                                 />
+                                 <span className="text-xs text-gray-500">{zoomLevel}%</span>
+                             </div>
                          </div>
                     </div>
 
@@ -791,7 +888,22 @@ export default function ProjectStudio() {
 
                              {/* Audio Track */}
                              <div className="h-12 bg-purple-900/20 rounded-lg relative overflow-hidden border border-purple-500/30">
-                                  <div className="absolute left-0 top-0 bottom-0 w-64 bg-purple-900/40 rounded-l-lg flex items-center justify-center">
+                                  <div className="absolute left-0 top-0 bottom-0 w-full flex items-center">
+                                      {audioClips.map(clip => (
+                                          <div 
+                                            key={clip.id}
+                                            className="absolute h-full bg-purple-600/50 border border-purple-400 rounded flex items-center justify-center text-[10px] text-white truncate px-1"
+                                            style={{ 
+                                                left: `${(clip.start / duration) * 100}%`,
+                                                width: `${(clip.duration / duration) * 100}%`
+                                            }}
+                                            title={clip.name}
+                                          >
+                                              {clip.name}
+                                          </div>
+                                      ))}
+                                  </div>
+                                  <div className="absolute left-0 top-0 bottom-0 w-64 bg-purple-900/40 rounded-l-lg flex items-center justify-center pointer-events-none">
                                       <svg className="w-full h-8 text-purple-500 opacity-50" viewBox="0 0 100 20" preserveAspectRatio="none">
                                           <path d="M0,10 Q10,20 20,10 T40,10 T60,10 T80,10 T100,10" fill="none" stroke="currentColor" strokeWidth="1" />
                                       </svg>

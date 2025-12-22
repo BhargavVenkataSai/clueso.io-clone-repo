@@ -82,11 +82,24 @@ const processAudio = async ({ text, voice = 'en', speed = 1 }) => {
         const filePath = path.join(uploadDir, fileName);
         await fs.promises.writeFile(filePath, combinedBuffer);
 
+        // Generate estimated word alignment
+        // Assuming average speaking rate or linear distribution
+        const words = cleanedText.split(/\s+/);
+        const totalDuration = combinedBuffer.length / 16000; // Rough estimate based on bitrate, or use the estimate below
+        const estimatedDuration = cleanedText.length * 0.08; // ~80ms per character is a decent approximation for TTS
+        
+        const wordAlignment = words.map((word, index) => {
+            const start = (index / words.length) * estimatedDuration;
+            const end = ((index + 1) / words.length) * estimatedDuration;
+            return { word, start, end };
+        });
+
         return {
             success: true,
             cleaned_text: cleanedText,
             audio_path: `/uploads/${fileName}`,
-            duration_estimate: cleanedText.length * 0.1 // rough estimate
+            duration_estimate: estimatedDuration,
+            word_alignment: wordAlignment
         };
 
     } catch (error) {

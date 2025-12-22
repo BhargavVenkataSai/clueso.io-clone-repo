@@ -176,7 +176,8 @@ const processAudioFull = async (req, res) => {
             data: {
                 path: result.audio_path,
                 cleaned_text: result.cleaned_text,
-                duration: result.duration_estimate
+                duration: result.duration_estimate,
+                word_alignment: result.word_alignment
             }
         });
 

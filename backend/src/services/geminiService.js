@@ -14,9 +14,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  */
 const processRecording = async ({ rawTranscript, uiEvents, styleGuidelines, docUseCase }) => {
   try {
-    // Use Gemini 1.5 Flash (closest available to "2.5 Flash" requested, assuming typo or future version, falling back to 1.5 Flash which is current fast model)
-    // If user insists on 2.5, I will use the model name they might expect if I knew it, but standard is gemini-1.5-flash
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Use Gemini 2.5 Flash as requested
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `
       You are an expert video editor and technical writer.
@@ -57,8 +56,11 @@ const processRecording = async ({ rawTranscript, uiEvents, styleGuidelines, docU
     
     return JSON.parse(jsonString);
   } catch (error) {
-    console.error("Gemini Service Error:", error);
-    throw new Error("Failed to process recording with Gemini");
+    console.error("Gemini Service Error:", error.message);
+    if (error.response) {
+        console.error("Gemini API Response Error:", JSON.stringify(error.response, null, 2));
+    }
+    throw new Error(`Failed to process recording with Gemini: ${error.message}`);
   }
 };
 
