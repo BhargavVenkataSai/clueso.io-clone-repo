@@ -24,9 +24,11 @@
     "express-validator": "^7.0.1",
     "google-tts-api": "^2.0.2",
     "jsonwebtoken": "^9.0.2",
+    "mammoth": "^1.11.0",
     "mongoose": "^8.0.0",
     "multer": "^2.0.2",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.449"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

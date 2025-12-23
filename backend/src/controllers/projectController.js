@@ -1,5 +1,10 @@
 const Project = require('../models/Project');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
+const { generateScriptFromDocument } = require('../services/geminiService');
 
 /**
  * @route   POST /api/projects
@@ -9,9 +14,51 @@ const crypto = require('crypto');
 const createProject = async (req, res) => {
   try {
     const { name, description, website } = req.body;
+    let script = '';
+    let slides = [];
+
+    // Handle File Uploads
+    if (req.files && req.files.length > 0) {
+        const docFile = req.files.find(f => f.fieldname === 'file');
+        const slideFiles = req.files.filter(f => f.fieldname === 'slides');
+
+        if (docFile) {
+            const filePath = docFile.path;
+            const ext = path.extname(docFile.originalname).toLowerCase();
+            let text = '';
+
+            try {
+                if (ext === '.pdf') {
+                    const dataBuffer = fs.readFileSync(filePath);
+                    const data = await pdfParse(dataBuffer);
+                    text = data.text;
+                } else if (ext === '.docx') {
+                    const result = await mammoth.extractRawText({ path: filePath });
+                    text = result.value;
+                } else if (ext === '.txt') {
+                    text = fs.readFileSync(filePath, 'utf8');
+                }
+
+                if (text) {
+                    script = await generateScriptFromDocument(text);
+                }
+            } catch (err) {
+                console.error("Error processing document:", err);
+                // Continue without script if processing fails
+            }
+        }
+
+        if (slideFiles.length > 0) {
+             slides = slideFiles.map(file => ({
+                url: `/uploads/${path.basename(file.path)}`,
+                name: file.originalname,
+                type: 'image'
+             }));
+        }
+    }
 
     // Generate public slug
-    const slugBase = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const slugBase = (name || 'Untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
     const randomSuffix = crypto.randomBytes(4).toString('hex');
     const publicSlug = `${slugBase}-${randomSuffix}`;
 
@@ -19,12 +66,14 @@ const createProject = async (req, res) => {
     const apiKey = crypto.randomBytes(20).toString('hex');
 
     const project = await Project.create({
-      name,
+      name: name || 'Untitled Project',
       description,
       website,
       publicSlug,
       owner: req.user._id,
       apiKey,
+      polishedScript: script,
+      slides: slides,
       team: [{
         user: req.user._id,
         role: 'owner'

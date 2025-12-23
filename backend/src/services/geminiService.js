@@ -64,6 +64,38 @@ const processRecording = async ({ rawTranscript, uiEvents, styleGuidelines, docU
   }
 };
 
+/**
+ * Generate a video script from document text
+ * @param {string} text - The extracted text from the document
+ * @returns {Promise<string>} - Returns the generated script
+ */
+const generateScriptFromDocument = async (text) => {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const prompt = `
+      You are an expert video script writer.
+      I have the content of a document (PDF/DOCX/TXT).
+      Please convert this content into an engaging video script for a narrated presentation.
+      
+      Document Content:
+      "${text.substring(0, 30000)}" 
+      
+      The script should be divided into sections corresponding to slides if possible.
+      Return ONLY the raw text of the script, ready for TTS. Do not include "Scene 1" markers or stage directions unless they are part of the narration.
+      Make it sound natural and professional.
+    `;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+  } catch (error) {
+    console.error("Gemini Script Generation Error:", error);
+    throw new Error("Failed to generate script from document");
+  }
+};
+
 module.exports = {
-  processRecording
+  processRecording,
+  generateScriptFromDocument
 };

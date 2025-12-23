@@ -57,7 +57,7 @@ export const workspaceAPI = {
 // Project API
 export const projectAPI = {
   getAll: () => api.get('/projects'),
-  create: (data) => api.post('/projects', data),
+  create: (data) => api.post('/projects', data, data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}),
   getById: (id) => api.get(`/projects/${id}`),
   update: (id, data) => api.put(`/projects/${id}`, data),
   delete: (id) => api.delete(`/projects/${id}`),

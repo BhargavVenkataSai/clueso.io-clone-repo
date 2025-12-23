@@ -104,6 +104,11 @@ const projectSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  slides: [{
+    url: String,
+    name: String,
+    order: Number
+  }],
   docSteps: [{
     step: Number,
     description: String,

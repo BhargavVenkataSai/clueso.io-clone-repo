@@ -78,6 +78,17 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteProject = async (projectId) => {
+    if (!confirm('Are you sure you want to delete this project?')) return;
+    
+    try {
+      await projectAPI.delete(projectId);
+      setProjects(projects.filter(p => p._id !== projectId));
+    } catch (error) {
+      alert('Failed to delete project: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   const handleCreateWorkspace = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -155,7 +166,7 @@ export default function Dashboard() {
           {/* New Video Button */}
           <div className="px-4 mb-4">
             <button
-              onClick={() => setShowCreateVideo(true)}
+              onClick={() => setShowNewProjectModal(true)}
               className="w-full bg-gradient-to-r from-pink-500 to-purple-500 text-white px-4 py-3 rounded-lg hover:from-pink-600 hover:to-purple-600 transition font-semibold"
             >
               + New video
@@ -559,7 +570,7 @@ export default function Dashboard() {
           {activeMenu === 'projects' && (
             <div className="px-12 py-8">
               <div className="flex items-center justify-between mb-8">
-                <h1 className="text-3xl font-bold text-white">Projects</h1>
+                <h1 className="text-3xl font-bold text-white">Recent projects</h1>
                 <button
                   onClick={() => setShowNewProjectModal(true)}
                   className="bg-gradient-to-r from-pink-500 to-purple-500 text-white px-6 py-3 rounded-lg hover:from-pink-600 hover:to-purple-600 transition font-semibold flex items-center space-x-2"
@@ -571,50 +582,93 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {projects.length === 0 ? (
-                  <div className="col-span-full text-center py-12 bg-gray-800 bg-opacity-50 rounded-xl border border-gray-700">
-                    <div className="text-gray-400 mb-4">
-                      <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                      </svg>
-                      <p className="text-xl font-semibold mb-2">No projects yet</p>
-                      <p>Create a project to start collecting feedback</p>
-                    </div>
-                    <button
-                      onClick={() => setShowNewProjectModal(true)}
-                      className="text-pink-400 hover:text-pink-300 font-medium"
-                    >
-                      Create your first project &rarr;
-                    </button>
+              {projects.length === 0 ? (
+                <div className="bg-gray-800 bg-opacity-50 rounded-xl border border-gray-700 p-12 text-center">
+                  <div className="text-gray-400 mb-4">
+                    <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <p className="text-xl font-semibold mb-2">No projects yet</p>
+                    <p>Create a project to start collecting feedback</p>
                   </div>
-                ) : (
-                  projects.map((project) => (
-                    <div 
-                      key={project._id}
-                      onClick={() => router.push(`/projects/${project._id}`)}
-                      className="bg-gray-800 bg-opacity-50 rounded-xl p-6 border border-gray-700 hover:border-gray-500 transition cursor-pointer group"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold">
-                          {project.name.charAt(0).toUpperCase()}
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${project.isActive ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-400'}`}>
-                          {project.isActive ? 'Active' : 'Archived'}
-                        </span>
-                      </div>
-                      
-                      <h3 className="text-xl font-bold text-white mb-2 group-hover:text-pink-400 transition">{project.name}</h3>
-                      <p className="text-gray-400 text-sm mb-4 line-clamp-2">{project.description || 'No description'}</p>
-                      
-                      <div className="flex items-center justify-between text-sm text-gray-500 pt-4 border-t border-gray-700">
-                        <span>{project.stats?.totalFeedback || 0} feedback</span>
-                        <span>{new Date(project.createdAt).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                  <button
+                    onClick={() => setShowNewProjectModal(true)}
+                    className="text-pink-400 hover:text-pink-300 font-medium"
+                  >
+                    Create your first project &rarr;
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-gray-800 bg-opacity-50 rounded-xl border border-gray-700 overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-900 bg-opacity-50">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Project</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Creator</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Updated</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Created</th>
+                        <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700">
+                      {projects.map((project) => (
+                        <tr 
+                          key={project._id}
+                          className="hover:bg-gray-700 hover:bg-opacity-30 transition group"
+                        >
+                          <td className="px-6 py-4">
+                            <div 
+                              onClick={() => router.push(`/projects/${project._id}`)}
+                              className="flex items-center space-x-3 cursor-pointer"
+                            >
+                              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                                {project.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="text-white font-medium group-hover:text-pink-400 transition">{project.name}</p>
+                                {project.description && (
+                                  <p className="text-gray-400 text-sm line-clamp-1">{project.description}</p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-white text-xs font-bold">
+                                {user?.name?.charAt(0).toUpperCase() || 'U'}
+                              </div>
+                              <div>
+                                <p className="text-white text-sm">{user?.name || 'Unknown User'}</p>
+                                <p className="text-gray-400 text-xs">{user?.email || ''}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-gray-300 text-sm">
+                            {new Date(project.updatedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </td>
+                          <td className="px-6 py-4 text-gray-300 text-sm">
+                            {new Date(project.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteProject(project._id);
+                              }}
+                              className="text-gray-400 hover:text-red-400 transition p-2 rounded-lg hover:bg-red-900 hover:bg-opacity-20"
+                              title="Delete project"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>

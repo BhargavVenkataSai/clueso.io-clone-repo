@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authenticate = require('../middleware/authenticate');
+const upload = require('../middleware/upload');
 const {
   createProject,
   getProjects,
@@ -13,7 +14,7 @@ const {
 router.use(authenticate);
 
 router.get('/', getProjects);
-router.post('/', createProject);
+router.post('/', upload.any(), createProject);
 router.get('/:id', getProject);
 router.put('/:id', updateProject);
 router.delete('/:id', deleteProject);

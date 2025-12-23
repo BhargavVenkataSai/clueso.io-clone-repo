@@ -120,7 +120,7 @@ See the full demo video: [Link to be added]
 - AI processing pipeline (mocked)
 
 **AI Features**
-- **Gemini 1.5 Flash Integration**: Real-time generation of polished scripts, zoom plans, and step-by-step documentation.
+- **Gemini 2.5 Flash Integration**: Real-time generation of polished scripts, zoom plans, and step-by-step documentation.
 - **Studio Interface**: Advanced video editor UI with timeline, script editing, and preview.
 - **Smart Processing**:
   - Polished Script generation from raw transcripts
