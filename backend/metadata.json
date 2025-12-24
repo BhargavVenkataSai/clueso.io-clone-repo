@@ -1,0 +1,343 @@
+{
+  "script": "Let's begin by uploading a file. Click 'Upload files to create a video', then select your desired document and click 'Open'. The file will then be uploaded to our platform. Once uploaded, your document will be processed and prepared as a video. The editor will then load, presenting your document slides as a video. You can easily adjust the video's aspect ratio to suit your needs, such as a portrait 3:4 ratio for mobile viewing. Our platform allows you to customize the voiceover for each slide. Simply select the desired voice from a range of accents. For example, for the first slide, we'll choose Amrit with an Indian accent. For the second slide, let's select Sammy, an Australian voice. For the third slide, we'll assign Natasha, an Indian female voice. For the fourth slide, we'll go with Helen, an Australian female voice. For the fifth slide, we'll select Guillaume, a French male voice. For the sixth slide, we'll choose Archer, a British male voice. And for the seventh slide, let's also use Archer. Finally, for the eighth slide, we'll revert to Jessica, an American female voice. After customizing all voices, click 'Generate Speech' to apply the changes and synthesize the narration for your entire video. Now, let's preview the generated video. This section will give you a quick reference for the most common MongoDB commands and operations, making it easier to work with your databases efficiently. Let's start with inserting data. To insert a single row into a collection, you use the 'insertOne' method, passing in a document with fields like title, body, and category. For example, you can insert a post with a title, body, and category as shown here. If you want to insert multiple rows at once, you use 'insertMany', passing in an array of documents. This is useful when you have several posts or records to add in one go, and each document in the array represents a new row in your collection. To retrieve data, you have several options. To get all rows from a collection, use the 'find' method. If you want the results to be formatted nicely, you can chain the 'pretty' method. To find specific rows, you can pass a query object to 'find', such as filtering by category. Sorting rows is done by chaining the 'sort' method, where you can specify the field and order. If you want to count the number of rows that match a certain condition, use the 'count' method after your query. For database management, you can show all databases with the 'show dbs' command. To see which database you're currently using, type 'db'. To create a new database or switch to another one, use the 'use' command followed by the database name. Dropping a database is done with 'db.dropDatabase()'. To create a new collection, use 'db.createCollection()' with the collection name. And to list all collections in the current database, use 'show collections'. When you want to limit the number of rows returned, use the 'limit' method. You can also chain multiple methods together, such as limiting and then sorting the results. To find just one row, use 'findOne' with your query. If you want to perform an action on each document returned, use 'forEach' with a callback function. And if you only need specific fields from your documents, you can specify those fields in your find query, which helps reduce the amount of data returned. This slide is covering essential MongoDB operations. First, if you need to rename a field in a document, you can use the '$rename' operator inside an 'updateOne' command. For example, if you want to rename the field 'views' to 'viewsCount' in a document where the title is 'Post Four', you'd use the command shown here. Next, to delete a row or document, you can use the 'remove' method, specifying the criteria for the document you want to delete, such as a title of 'Post Four'. MongoDB supports sub-documents, which are documents nested inside other documents. The example here shows how you can update a post to include an array of comments, where each comment itself is a sub-document with its own fields like 'reply' and 'user'. This is useful for representing more complex data structures within a single document. We're also covering advanced querying and optimizing features. If you want to find documents by an element in an array, you can use the '$in' method with a query that matches the array element, such as searching for a comment by a specific user. To improve query performance, especially on large collections, you can add an index to a field using the 'createIndex()' method. For full-text search, MongoDB allows you to search for documents containing specific text using the '$text' operator. Lastly, you can perform range queries using the '$gt' and '$lt' operators to find documents where a field's value is greater than or less than a specified value. These commands make it easy to manage and search your data efficiently based on various criteria. For updating data, you have a few options. To update an entire row, use 'updateOne' with a filter and the new data. If you only want to update a specific field, use the '$set' operator inside your update statement. And if you need to increment a numeric field, such as a counter, use the '$inc' operator to increase its value by a specified amount. These commands make it easy to modify your data as your application evolves.",
+  "steps": [
+    {
+      "timestamp": 0,
+      "title": "Upload Files",
+      "instruction": "Click 'Upload files to create a video'."
+    },
+    {
+      "timestamp": 0.04,
+      "title": "Select Document",
+      "instruction": "Select your desired document from your computer and click 'Open'."
+    },
+    {
+      "timestamp": 0.12,
+      "title": "Initiate Upload",
+      "instruction": "Click 'Create' to begin uploading the file."
+    },
+    {
+      "timestamp": 1.37,
+      "title": "Document Loaded",
+      "instruction": "The document is now loaded into the editor, ready for editing."
+    },
+    {
+      "timestamp": 1.47,
+      "title": "Navigate Slides",
+      "instruction": "Click on 'Slide 3' in the left panel to view it, then click 'Slide 1' to return to the first slide."
+    },
+    {
+      "timestamp": 1.5,
+      "title": "Change Aspect Ratio",
+      "instruction": "Click on the '764:1080' dropdown and select 'Classic Portrait (3:4)' to change the video's aspect ratio."
+    },
+    {
+      "timestamp": 2.19,
+      "title": "Change Voiceover",
+      "instruction": "Click on 'Jessica' next to 'Slide 1', then click 'Change voice'."
+    },
+    {
+      "timestamp": 2.22,
+      "title": "Select Indian Accent",
+      "instruction": "Click the 'Accents' dropdown, select 'Indian', then choose 'Amrit' and click 'Confirm'."
+    },
+    {
+      "timestamp": 2.3,
+      "title": "Change Voice for Slide 2",
+      "instruction": "Click on 'Jessica' next to 'Slide 2', then click 'Change voice'."
+    },
+    {
+      "timestamp": 2.34,
+      "title": "Select Australian Accent",
+      "instruction": "Click the 'Accents' dropdown, select 'Australian', then choose 'Sammy' and click 'Confirm'."
+    },
+    {
+      "timestamp": 2.5,
+      "title": "Change Voice for Slide 3",
+      "instruction": "Click on 'Jessica' next to 'Slide 3', then click 'Change voice'."
+    },
+    {
+      "timestamp": 2.53,
+      "title": "Select Indian Accent",
+      "instruction": "Click the 'Accents' dropdown, select 'Indian', then choose 'Natasha' and click 'Confirm'."
+    },
+    {
+      "timestamp": 3.09,
+      "title": "Change Voice for Slide 4",
+      "instruction": "Click on 'Jessica' next to 'Slide 4', then click 'Change voice'."
+    },
+    {
+      "timestamp": 3.13,
+      "title": "Select Australian Accent",
+      "instruction": "Click the 'Accents' dropdown, select 'Australian', then choose 'Helen' and click 'Confirm'."
+    },
+    {
+      "timestamp": 3.41,
+      "title": "Change Voice for Slide 5",
+      "instruction": "Click on 'Jessica' next to 'Slide 5', then click 'Change voice'."
+    },
+    {
+      "timestamp": 3.47,
+      "title": "Select French Accent",
+      "instruction": "Click the 'Accents' dropdown, select 'French', then choose 'Guillaume' and click 'Confirm'."
+    },
+    {
+      "timestamp": 4.03,
+      "title": "Change Voice for Slide 6",
+      "instruction": "Click on 'Jessica' next to 'Slide 6', then click 'Change voice'."
+    },
+    {
+      "timestamp": 4.1,
+      "title": "Select British Accent",
+      "instruction": "Click the 'Accents' dropdown, select 'British', then choose 'Archer' and click 'Confirm'."
+    },
+    {
+      "timestamp": 4.29,
+      "title": "Change Voice for Slide 7",
+      "instruction": "Click on 'Jessica' next to 'Slide 7', then click 'Change voice'."
+    },
+    {
+      "timestamp": 4.34,
+      "title": "Select British Accent",
+      "instruction": "Click the 'Accents' dropdown, select 'British', then choose 'Archer' and click 'Confirm'."
+    },
+    {
+      "timestamp": 4.5,
+      "title": "Change Voice for Slide 8",
+      "instruction": "Click on 'Jessica' next to 'Slide 8', then click 'Change voice'."
+    },
+    {
+      "timestamp": 4.56,
+      "title": "Select American Accent",
+      "instruction": "Click the 'Accents' dropdown, select 'American', then choose 'Jessica' and click 'Confirm'."
+    },
+    {
+      "timestamp": 5,
+      "title": "Generate Speech",
+      "instruction": "Click 'Generate Speech' to synthesize the new voiceovers for your video."
+    },
+    {
+      "timestamp": 5.22,
+      "title": "Preview Video with Narration",
+      "instruction": "The video will now play with the newly generated speech for each slide."
+    }
+  ],
+  "visuals": [
+    {
+      "timestamp": 0,
+      "coordinates": [
+        27.75,
+        237.75,
+        96.75,
+        417
+      ]
+    },
+    {
+      "timestamp": 0.04,
+      "coordinates": [
+        587,
+        778,
+        616,
+        854
+      ]
+    },
+    {
+      "timestamp": 0.12,
+      "coordinates": [
+        336,
+        663,
+        375,
+        725
+      ]
+    },
+    {
+      "timestamp": 1.37,
+      "coordinates": [
+        182,
+        616,
+        650,
+        893
+      ]
+    },
+    {
+      "timestamp": 1.47,
+      "coordinates": [
+        603,
+        52,
+        642,
+        151
+      ]
+    },
+    {
+      "timestamp": 1.5,
+      "coordinates": [
+        55,
+        680,
+        77,
+        755
+      ]
+    },
+    {
+      "timestamp": 2.19,
+      "coordinates": [
+        267,
+        187,
+        287,
+        240
+      ]
+    },
+    {
+      "timestamp": 2.22,
+      "coordinates": [
+        201,
+        396,
+        226,
+        482
+      ]
+    },
+    {
+      "timestamp": 2.3,
+      "coordinates": [
+        308,
+        187,
+        328,
+        240
+      ]
+    },
+    {
+      "timestamp": 2.34,
+      "coordinates": [
+        201,
+        396,
+        226,
+        482
+      ]
+    },
+    {
+      "timestamp": 2.5,
+      "coordinates": [
+        603,
+        187,
+        622,
+        240
+      ]
+    },
+    {
+      "timestamp": 2.53,
+      "coordinates": [
+        201,
+        396,
+        226,
+        482
+      ]
+    },
+    {
+      "timestamp": 3.09,
+      "coordinates": [
+        757,
+        187,
+        776,
+        240
+      ]
+    },
+    {
+      "timestamp": 3.13,
+      "coordinates": [
+        201,
+        396,
+        226,
+        482
+      ]
+    },
+    {
+      "timestamp": 3.41,
+      "coordinates": [
+        267,
+        187,
+        287,
+        240
+      ]
+    },
+    {
+      "timestamp": 3.47,
+      "coordinates": [
+        201,
+        396,
+        226,
+        482
+      ]
+    },
+    {
+      "timestamp": 4.03,
+      "coordinates": [
+        561,
+        187,
+        581,
+        240
+      ]
+    },
+    {
+      "timestamp": 4.1,
+      "coordinates": [
+        201,
+        396,
+        226,
+        482
+      ]
+    },
+    {
+      "timestamp": 4.29,
+      "coordinates": [
+        722,
+        187,
+        742,
+        240
+      ]
+    },
+    {
+      "timestamp": 4.34,
+      "coordinates": [
+        201,
+        396,
+        226,
+        482
+      ]
+    },
+    {
+      "timestamp": 4.5,
+      "coordinates": [
+        883,
+        187,
+        903,
+        240
+      ]
+    },
+    {
+      "timestamp": 4.56,
+      "coordinates": [
+        201,
+        396,
+        226,
+        482
+      ]
+    },
+    {
+      "timestamp": 5,
+      "coordinates": [
+        107,
+        50,
+        131,
+        169
+      ]
+    },
+    {
+      "timestamp": 5.22,
+      "coordinates": [
+        603,
+        638,
+        627,
+        661
+      ]
+    }
+  ]
+}

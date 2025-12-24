@@ -257,10 +257,123 @@ const generateFeedbackInsights = async (content) => {
 // --- Advanced AI Processor (Gemini Integration) ---
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { GoogleAIFileManager } = require("@google/generative-ai/server");
 const { VIDEO_PROCESSOR_SYSTEM_PROMPT } = require('./aiProcessorPrompts');
 
 // Initialize Gemini (Mock reusing the key from env if available)
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "YOUR_API");
+const apiKey = process.env.GEMINI_API_KEY || "YOUR_API";
+const genAI = new GoogleGenerativeAI(apiKey);
+const fileManager = new GoogleAIFileManager(apiKey);
+
+const responseSchema = {
+  type: "object",
+  properties: {
+    polished_script: {
+      type: "object",
+      properties: {
+        segments: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              segment_id: { type: "string" },
+              start_sec: { type: "number" },
+              end_sec: { type: "number" },
+              narration_text: { type: "string" },
+              associated_events: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    timestamp_sec: { type: "number" },
+                    event_type: { type: "string" },
+                    target_description: { type: "string" },
+                    screenshot_id: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        global_style_notes: { type: "string" }
+      }
+    },
+    voiceover_script: {
+      type: "object",
+      properties: {
+        language: { type: "string" },
+        voice_style_hint: { type: "string" },
+        segments: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              segment_id: { type: "string" },
+              narration_text: { type: "string" },
+              pause_after_sec: { type: "number" }
+            }
+          }
+        }
+      }
+    },
+    zoom_plan: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              start_sec: { type: "number" },
+              end_sec: { type: "number" },
+              zoom_type: { type: "string" },
+              target_description: { type: "string" },
+              recommended_zoom_level: { type: "number" },
+              screenshot_id: { type: "string" },
+              reason: { type: "string" }
+            }
+          }
+        },
+        global_visual_notes: { type: "string" }
+      }
+    },
+    step_by_step_doc: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        audience: { type: "string" },
+        steps: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              step_number: { type: "number" },
+              heading: { type: "string" },
+              body: { type: "string" },
+              related_events: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    timestamp_sec: { type: "number" },
+                    event_type: { type: "string" },
+                    target_description: { type: "string" },
+                    screenshot_id: { type: "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        summary: { type: "string" },
+        tags: {
+          type: "array",
+          items: { type: "string" }
+        }
+      }
+    }
+  }
+};
 
 /**
  * Advanced Video Processor
@@ -271,14 +384,42 @@ const processVideoAdvanced = async ({
     ui_events, 
     video_metadata, 
     style_guidelines, 
-    doc_use_case 
+    doc_use_case,
+    video_path
 }) => {
     try {
         console.log("🚀 Starting Advanced AI Video Processing...");
 
+        let fileUri = null;
+        if (video_path) {
+            console.log("Uploading video to Gemini...");
+            const uploadResult = await fileManager.uploadFile(video_path, {
+                mimeType: "video/mp4",
+                displayName: "User Video",
+            });
+            fileUri = uploadResult.file.uri;
+            console.log(`Video uploaded: ${fileUri}`);
+
+            // Wait for processing
+            let file = await fileManager.getFile(uploadResult.file.name);
+            while (file.state === "PROCESSING") {
+                console.log("Waiting for video processing...");
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                file = await fileManager.getFile(uploadResult.file.name);
+            }
+            if (file.state === "FAILED") {
+                throw new Error("Video processing failed.");
+            }
+            console.log("Video processing complete.");
+        }
+
         const model = genAI.getGenerativeModel({ 
             model: "gemini-2.5-flash",
-            // generationConfig: { responseMimeType: "application/json" } // Keep removed for compatibility
+            systemInstruction: VIDEO_PROCESSOR_SYSTEM_PROMPT,
+            generationConfig: { 
+                responseMimeType: "application/json",
+                responseSchema: responseSchema
+            }
         });
 
         // Construct User Prompt
@@ -301,20 +442,24 @@ const processVideoAdvanced = async ({
         ${doc_use_case}
         `;
 
-        const result = await model.generateContent([
-            VIDEO_PROCESSOR_SYSTEM_PROMPT, 
-            userPrompt
-        ]);
+        const contentParts = [{ text: userPrompt }];
+        if (fileUri) {
+            contentParts.push({
+                fileData: {
+                    mimeType: "video/mp4",
+                    fileUri: fileUri
+                }
+            });
+        }
+
+        const result = await model.generateContent(contentParts);
 
         const response = await result.response;
-        let text = response.text();
+        const text = response.text();
         
         console.log("🤖 Gemini Response received.");
         
-        // Cleanup markdown if present
-        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-
-        // Parse JSON
+        // Parse JSON (should be valid JSON due to responseMimeType)
         const data = JSON.parse(text);
         return { success: true, data };
 

@@ -4,7 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
+<<<<<<< HEAD
 const { generateScriptFromDocument } = require('../services/geminiService');
+=======
+const { generateScriptFromDocument, generateSlideScript, generateImageScript } = require('../services/geminiService');
+>>>>>>> fc79f4c (Update project structure and backend logic)
 
 /**
  * @route   POST /api/projects
@@ -16,12 +20,17 @@ const createProject = async (req, res) => {
     const { name, description, website } = req.body;
     let script = '';
     let slides = [];
+<<<<<<< HEAD
+=======
+    let polishedScript = '';
+>>>>>>> fc79f4c (Update project structure and backend logic)
 
     // Handle File Uploads
     if (req.files && req.files.length > 0) {
         const docFile = req.files.find(f => f.fieldname === 'file');
         const slideFiles = req.files.filter(f => f.fieldname === 'slides');
 
+<<<<<<< HEAD
         if (docFile) {
             const filePath = docFile.path;
             const ext = path.extname(docFile.originalname).toLowerCase();
@@ -48,6 +57,9 @@ const createProject = async (req, res) => {
             }
         }
 
+=======
+        // Process Slides (Images)
+>>>>>>> fc79f4c (Update project structure and backend logic)
         if (slideFiles.length > 0) {
              slides = slideFiles.map(file => ({
                 url: `/uploads/${path.basename(file.path)}`,
@@ -55,6 +67,71 @@ const createProject = async (req, res) => {
                 type: 'image'
              }));
         }
+<<<<<<< HEAD
+=======
+
+        // Process Document for Script Generation
+        if (docFile) {
+            const filePath = docFile.path;
+            const ext = path.extname(docFile.originalname).toLowerCase();
+            
+            try {
+                if (ext === '.pdf') {
+                    const dataBuffer = fs.readFileSync(filePath);
+                    
+                    // Custom render to extract text per page
+                    const options = {
+                        pagerender: async (pageData) => {
+                            const textContent = await pageData.getTextContent();
+                            let text = '';
+                            let lastY;
+                            for (let item of textContent.items) {
+                                if (lastY == item.transform[5] || !lastY){
+                                    text += item.str;
+                                }  
+                                else{
+                                    text += '\n' + item.str;
+                                }                                                    
+                                lastY = item.transform[5];
+                            }
+                            return text + '---PAGE_BREAK---';
+                        }
+                    };
+
+                    const data = await pdfParse(dataBuffer, options);
+                    const fullText = data.text;
+                    const pageTexts = fullText.split('---PAGE_BREAK---').filter(t => t.trim());
+
+                    // Generate script for each slide
+                    let generatedScripts = [];
+                    for (let i = 0; i < pageTexts.length; i++) {
+                        // Only generate if we have a corresponding slide image (or if it's the doc itself)
+                        if (i < slides.length) {
+                            const slideScript = await generateSlideScript(pageTexts[i], i);
+                            generatedScripts.push(slideScript);
+                        }
+                    }
+                    polishedScript = generatedScripts.join('\n\n');
+
+                } else if (['.png', '.jpg', '.jpeg'].includes(ext)) {
+                    // Image processing
+                    const imageScript = await generateImageScript(filePath);
+                    polishedScript = imageScript;
+                } else if (ext === '.docx') {
+                    const result = await mammoth.extractRawText({ path: filePath });
+                    // For DOCX, we might not have slides, so just generate one big script
+                    // Or if we have slides (from frontend?), we map it.
+                    // Assuming DOCX is treated as one block for now.
+                    polishedScript = await generateSlideScript(result.value, 0);
+                } else if (ext === '.txt') {
+                    const text = fs.readFileSync(filePath, 'utf8');
+                    polishedScript = await generateSlideScript(text, 0);
+                }
+            } catch (err) {
+                console.error("Error processing document:", err);
+            }
+        }
+>>>>>>> fc79f4c (Update project structure and backend logic)
     }
 
     // Generate public slug
@@ -72,7 +149,11 @@ const createProject = async (req, res) => {
       publicSlug,
       owner: req.user._id,
       apiKey,
+<<<<<<< HEAD
       polishedScript: script,
+=======
+      polishedScript: polishedScript || script,
+>>>>>>> fc79f4c (Update project structure and backend logic)
       slides: slides,
       team: [{
         user: req.user._id,

@@ -14,7 +14,7 @@ const VOICES = [
     { id: 'emily', name: 'Emily', gender: 'female', color: 'text-orange-400' },
 ];
 
-export default function ScriptPanel({ projectId, onAddAudio, initialScript, currentTime, isPlaying, setGenerating: setParentGenerating }) {
+export default function ScriptPanel({ projectId, onAddAudio, initialScript, currentTime, isPlaying, setGenerating: setParentGenerating, audioClips }) {
     const [slides, setSlides] = useState([
         { id: 1, title: 'Slide 1', text: initialScript || '', voice: 'amrit', alignment: null }
     ]);
@@ -181,6 +181,10 @@ export default function ScriptPanel({ projectId, onAddAudio, initialScript, curr
                 {slides.map((slide, index) => {
                     const currentVoice = VOICES.find(v => v.id === slide.voice) || VOICES[0];
                     
+                    // Find the audio clip associated with this slide to get its start time
+                    const slideAudioClip = audioClips?.find(clip => clip.slideId === slide.id);
+                    const slideStartTime = slideAudioClip ? slideAudioClip.startTime : 0;
+
                     return (
                         <div key={slide.id} className="bg-[#16181d] border border-gray-800 rounded-lg p-4 group hover:border-gray-700 transition-colors">
                             {/* Slide Header */}
@@ -251,11 +255,7 @@ export default function ScriptPanel({ projectId, onAddAudio, initialScript, curr
                                     text={slide.text} 
                                     alignment={slide.alignment} 
                                     currentTime={currentTime} 
-                                    // Assuming each slide starts at 0 relative to itself, but in reality 
-                                    // we need to know the slide's start time in the global timeline.
-                                    // For now, let's assume the first slide starts at 0.
-                                    // In a real app, we'd pass the slide's start time.
-                                    startTime={0} 
+                                    startTime={slideStartTime} 
                                 />
                             ) : (
                                 <AutoResizeTextarea

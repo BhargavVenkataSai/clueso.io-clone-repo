@@ -76,6 +76,12 @@ export default function NewProjectModal({ isOpen, onClose }) {
                 setProcessingStatus('');
                 return;
             }
+<<<<<<< HEAD
+=======
+        } else if (file.type.startsWith('image/')) {
+            // For images, treat the image itself as the single slide
+            formData.append('slides', file, 'slide-1.jpg');
+>>>>>>> fc79f4c (Update project structure and backend logic)
         }
     }
 
@@ -255,13 +261,21 @@ export default function NewProjectModal({ isOpen, onClose }) {
                     {projectType === 'slide' && (
                       <div>
                         <label className="block text-sm font-medium text-gray-400 mb-1">
+<<<<<<< HEAD
                           Upload Document (PDF, DOCX, TXT)
+=======
+                          Upload Document (PDF, Images)
+>>>>>>> fc79f4c (Update project structure and backend logic)
                         </label>
                         <div className="relative border-2 border-dashed border-gray-700 rounded-lg p-6 hover:border-blue-500 transition-colors">
                             <input
                                 type="file"
                                 onChange={handleFileChange}
+<<<<<<< HEAD
                                 accept=".pdf,.docx,.txt"
+=======
+                                accept=".pdf,.png,.jpg,.jpeg"
+>>>>>>> fc79f4c (Update project structure and backend logic)
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             />
                             <div className="text-center">
@@ -278,7 +292,11 @@ export default function NewProjectModal({ isOpen, onClose }) {
                                             Click to upload or drag and drop
                                         </p>
                                         <p className="text-xs text-gray-500 mt-1">
+<<<<<<< HEAD
                                             PDF, DOCX, or TXT
+=======
+                                            PDF, PNG, JPG
+>>>>>>> fc79f4c (Update project structure and backend logic)
                                         </p>
                                     </>
                                 )}

@@ -341,6 +341,7 @@ export default function ProjectStudio() {
                             isPlaying={isPlaying}
                             onAddAudio={handleAddAudio}
                             setGenerating={setIsProcessingAudio}
+                            audioClips={audioClips}
                         />
                     )}
                     {activeTab !== 'script' && (
@@ -652,7 +653,11 @@ export default function ProjectStudio() {
                                             </div>
                                             <div>
                                                 <p className="text-sm text-gray-300">{step.description}</p>
-                                                <span className="text-xs text-gray-600 font-mono">{new Date(step.timestamp * 1000).toISOString().substr(14, 5)}</span>
+                                                                                                <span className="text-xs text-gray-600 font-mono">
+                                                                                                    {typeof step.timestamp === 'number' && !isNaN(step.timestamp)
+                                                                                                        ? new Date(step.timestamp * 1000).toISOString().substr(14, 5)
+                                                                                                        : '--:--'}
+                                                                                                </span>
                                             </div>
                                         </div>
                                     ))}
@@ -780,7 +785,13 @@ export default function ProjectStudio() {
                              </button>
 
                              <span className="text-xs font-mono text-gray-400 min-w-[100px] text-center">
-                                {new Date(currentTime * 1000).toISOString().substr(11, 8)} / {new Date(duration * 1000).toISOString().substr(11, 8)}
+                                                                {typeof currentTime === 'number' && !isNaN(currentTime)
+                                                                    ? new Date(currentTime * 1000).toISOString().substr(11, 8)
+                                                                    : '--:--:--'}
+                                                                {' / '}
+                                                                {typeof duration === 'number' && !isNaN(duration)
+                                                                    ? new Date(duration * 1000).toISOString().substr(11, 8)
+                                                                    : '--:--:--'}
                              </span>
                          </div>
 
@@ -894,19 +905,14 @@ export default function ProjectStudio() {
                                             key={clip.id}
                                             className="absolute h-full bg-purple-600/50 border border-purple-400 rounded flex items-center justify-center text-[10px] text-white truncate px-1"
                                             style={{ 
-                                                left: `${(clip.start / duration) * 100}%`,
-                                                width: `${(clip.duration / duration) * 100}%`
+                                                left: `${(clip.startTime / (duration || 1)) * 100}%`,
+                                                width: `${(clip.duration / (duration || 1)) * 100}%`
                                             }}
-                                            title={clip.name}
+                                            title={clip.label || 'Audio Clip'}
                                           >
-                                              {clip.name}
+                                              <span className="truncate">{clip.label || 'Audio'}</span>
                                           </div>
                                       ))}
-                                  </div>
-                                  <div className="absolute left-0 top-0 bottom-0 w-64 bg-purple-900/40 rounded-l-lg flex items-center justify-center pointer-events-none">
-                                      <svg className="w-full h-8 text-purple-500 opacity-50" viewBox="0 0 100 20" preserveAspectRatio="none">
-                                          <path d="M0,10 Q10,20 20,10 T40,10 T60,10 T80,10 T100,10" fill="none" stroke="currentColor" strokeWidth="1" />
-                                      </svg>
                                   </div>
                              </div>
                         </div>

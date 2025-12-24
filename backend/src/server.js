@@ -22,7 +22,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/projects', require('./routes/projectRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
-app.use('/api/workspaces', require('./routes/projectRoutes'));
+app.use('/api/workspaces', require('./routes/workspaceRoutes'));
 app.use('/api/videos', require('./routes/videoRoutes'));
 app.use('/api/feedback', require('./routes/feedbackRoutes'));
 app.use('/api/rag', require('./routes/ragRoutes'));
@@ -119,6 +119,7 @@ app.use(errorHandler);
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🌐 Backend URL: http://localhost:${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 

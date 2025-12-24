@@ -16,6 +16,29 @@ const videoSchema = new mongoose.Schema({
     trim: true,
     maxlength: [2000, 'Description cannot exceed 2000 characters']
   },
+  // Pipeline & Status Tracking
+  status: {
+    type: String,
+    enum: ['uploading', 'processing', 'completed', 'failed'],
+    default: 'uploading',
+    index: true
+  },
+  pipelineStage: {
+    type: String,
+    enum: ['init', 'transcribing', 'summarizing', 'generating_docs', 'ready', 'error'],
+    default: 'init'
+  },
+  sourceUrl: {
+    type: String,
+    trim: true,
+    comment: 'Direct URL to source video if not uploaded via standard flow'
+  },
+  language: {
+    type: String,
+    default: 'en',
+    trim: true,
+    comment: 'Primary language of the video content'
+  },
   workspace: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Workspace',
