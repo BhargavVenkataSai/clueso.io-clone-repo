@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 import { workspaceAPI, videoAPI, projectAPI } from '../lib/api';
 import NewProjectModal from '../components/dashboard/NewProjectModal';
+import ConfirmModal from '../components/common/ConfirmModal';
 
 export default function Dashboard() {
   const { user, logout, loading: authLoading } = useAuth();
@@ -18,6 +19,7 @@ export default function Dashboard() {
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [projects, setProjects] = useState([]);
   const [activeMenu, setActiveMenu] = useState('projects');
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, projectId: null, projectName: '' });
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -79,14 +81,20 @@ export default function Dashboard() {
   };
 
   const handleDeleteProject = async (projectId) => {
-    if (!confirm('Are you sure you want to delete this project?')) return;
-    
     try {
       await projectAPI.delete(projectId);
       setProjects(projects.filter(p => p._id !== projectId));
     } catch (error) {
       alert('Failed to delete project: ' + (error.response?.data?.error || error.message));
     }
+  };
+
+  const openDeleteConfirm = (project) => {
+    setDeleteConfirm({ isOpen: true, projectId: project._id, projectName: project.name });
+  };
+
+  const closeDeleteConfirm = () => {
+    setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' });
   };
 
   const handleCreateWorkspace = async (e) => {
@@ -653,7 +661,7 @@ export default function Dashboard() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDeleteProject(project._id);
+                                openDeleteConfirm(project);
                               }}
                               className="text-gray-400 hover:text-red-400 transition p-2 rounded-lg hover:bg-red-900 hover:bg-opacity-20"
                               title="Delete project"
@@ -770,6 +778,17 @@ export default function Dashboard() {
         <NewProjectModal 
             isOpen={showNewProjectModal} 
             onClose={() => setShowNewProjectModal(false)}
+        />
+
+        {/* Delete Confirmation Modal */}
+        <ConfirmModal
+          isOpen={deleteConfirm.isOpen}
+          onClose={closeDeleteConfirm}
+          onConfirm={() => handleDeleteProject(deleteConfirm.projectId)}
+          title="Delete Project"
+          message={`Are you sure you want to delete "${deleteConfirm.projectName}"? This action cannot be undone.`}
+          confirmText="Delete Project"
+          variant="danger"
         />
         
       </div>

@@ -3,8 +3,11 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useAuth } from '../../contexts/AuthContext';
-import { projectAPI, videoAPI } from '../../lib/api';
+import { projectAPI, videoAPI, aiAPI } from '../../lib/api';
 import ScriptPanel from '../../components/studio/ScriptPanel';
+import EditorStage from '../studio/EditorStage';
+import ArticleEditor from '../../components/studio/ArticleEditor';
+import ArticleAIPanel from '../../components/studio/ArticleAIPanel';
 
 export default function ProjectStudio() {
   const { user, loading: authLoading } = useAuth();
@@ -44,6 +47,15 @@ export default function ProjectStudio() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(50);
 
+  // EditorStage State - for real-time text preview
+  const [previewText, setPreviewText] = useState("Select a slide to see preview...");
+  const [viewMode, setViewMode] = useState('canvas'); // 'canvas' or 'preview'
+
+  // Article Editor State
+  const [editorMode, setEditorMode] = useState('video'); // 'video' or 'article'
+  const [articleContent, setArticleContent] = useState('');
+  const [articleLoading, setArticleLoading] = useState(false);
+
   // Helper to save history
   const saveHistory = (newClips) => {
       const newHistory = history.slice(0, historyIndex + 1);
@@ -56,16 +68,27 @@ export default function ProjectStudio() {
   const activeClip = timelineClips.find(clip => currentTime >= clip.start && currentTime < clip.start + clip.duration) || timelineClips[0];
 
   const handleAddAudio = (audioData) => {
+      // Calculate start time based on slide position or current time
+      const startTime = audioData.slideId 
+          ? timelineClips.find(c => c.id === audioData.slideId)?.start || currentTime
+          : currentTime;
+          
       const newClip = {
           id: Date.now(),
           type: 'audio',
           name: `Voiceover - ${audioData.text.substring(0, 10)}...`,
           src: audioData.url,
-          duration: audioData.duration,
-          start: currentTime,
-          color: 'bg-purple-600'
+          duration: audioData.duration || 5,
+          start: startTime,
+          startTime: startTime, // For compatibility with video store
+          color: 'bg-purple-600',
+          slideId: audioData.slideId,
+          voice: audioData.voice,
+          text: audioData.text,
+          wordAlignment: audioData.wordAlignment || [] // Word-level timing for karaoke
       };
-      setAudioClips([...audioClips, newClip]);
+      setAudioClips(prev => [...prev, newClip]);
+      console.log('🔊 Added audio clip:', newClip.name, 'at', startTime.toFixed(2) + 's');
   };
 
   const handleAddClip = (type) => {
@@ -87,28 +110,90 @@ export default function ProjectStudio() {
       setCurrentTime(newClip.start);
   };
 
-  const handleFileUpload = (e) => {
-      const file = e.target.files[0];
-      if (file) {
-          const objectUrl = URL.createObjectURL(file);
+  const handleFileUpload = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setActiveMenu(null); // Close the dropdown
+
+      // Check if it's a video file
+      if (file.type.startsWith('video/')) {
+          try {
+              console.log('📹 Uploading video to project...');
+              
+              // Create FormData and upload to project
+              const formData = new FormData();
+              formData.append('video', file);
+              
+              const response = await projectAPI.uploadVideo(id, formData);
+              const videoData = response.data.data;
+              
+              console.log('✅ Video uploaded:', videoData);
+              
+              // Update local project state with video URL
+              setProject(prev => ({
+                  ...prev,
+                  videoUrl: videoData.videoUrl,
+                  videoFilename: videoData.filename
+              }));
+              
+              // Create a local URL for preview in timeline
+              const localUrl = URL.createObjectURL(file);
+              
+              // Add clip to timeline
+              const newClip = {
+                  id: Date.now(),
+                  type: 'video',
+                  name: file.name,
+                  src: localUrl,
+                  duration: 10, // Default duration
+                  start: timelineClips.length > 0 
+                      ? timelineClips[timelineClips.length - 1].start + timelineClips[timelineClips.length - 1].duration 
+                      : 0,
+                  color: 'bg-purple-900',
+                  serverUrl: videoData.videoUrl
+              };
+              
+              const newClips = [...timelineClips, newClip];
+              setTimelineClips(newClips);
+              saveHistory(newClips);
+              
+              // Auto-select and jump to new clip
+              setSelectedClipId(newClip.id);
+              setCurrentTime(newClip.start);
+              
+              alert('✅ Video uploaded successfully! AI Rewrite now has access to this video.');
+              
+          } catch (err) {
+              console.error('❌ Failed to upload video:', err);
+              alert('Failed to upload video. Please try again.');
+          }
+      } else if (file.type.startsWith('image/')) {
+          // For images, just add to timeline locally
+          const localUrl = URL.createObjectURL(file);
           const newClip = {
               id: Date.now(),
-              type: file.type.startsWith('video') ? 'video' : 'image',
+              type: 'image',
               name: file.name,
-              src: objectUrl,
-              duration: 10, // Mock duration
-              start: timelineClips.length > 0 ? timelineClips[timelineClips.length - 1].start + timelineClips[timelineClips.length - 1].duration : 0,
-              color: 'bg-purple-900'
+              src: localUrl,
+              duration: 5,
+              start: timelineClips.length > 0 
+                  ? timelineClips[timelineClips.length - 1].start + timelineClips[timelineClips.length - 1].duration 
+                  : 0,
+              color: 'bg-blue-600'
           };
+          
           const newClips = [...timelineClips, newClip];
           setTimelineClips(newClips);
           saveHistory(newClips);
-          setActiveMenu(null);
-
+          
           // Auto-select and jump to new clip
           setSelectedClipId(newClip.id);
           setCurrentTime(newClip.start);
       }
+
+      // Reset the input
+      e.target.value = '';
   };
 
   const handleSplit = () => {
@@ -205,6 +290,8 @@ export default function ProjectStudio() {
       e.preventDefault();
   };
 
+
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
@@ -239,12 +326,67 @@ export default function ProjectStudio() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [activeMenu]);
 
+  // Playback timer - advances currentTime when playing
+  useEffect(() => {
+    let animationFrameId;
+    let lastTime = performance.now();
+
+    const tick = (now) => {
+      if (!isPlaying) return;
+
+      const deltaTime = (now - lastTime) / 1000; // Convert to seconds
+      lastTime = now;
+
+      setCurrentTime((prevTime) => {
+        const newTime = prevTime + deltaTime;
+        // Stop at the end of the timeline
+        const totalDuration = timelineClips.reduce((sum, clip) => sum + clip.duration, 0);
+        if (newTime >= totalDuration) {
+          setIsPlaying(false);
+          return totalDuration;
+        }
+        return newTime;
+      });
+
+      animationFrameId = requestAnimationFrame(tick);
+    };
+
+    if (isPlaying) {
+      lastTime = performance.now();
+      animationFrameId = requestAnimationFrame(tick);
+    }
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [isPlaying, timelineClips]);
+
   const loadProject = async () => {
     try {
       const response = await projectAPI.getById(id);
-      setProject(response.data.data);
-      if (response.data.data.docSteps) setDocSteps(response.data.data.docSteps);
-      if (response.data.data.zoomPlan) setZoomPlan(response.data.data.zoomPlan);
+      const projectData = response.data.data;
+      setProject(projectData);
+      
+      if (projectData.docSteps) setDocSteps(projectData.docSteps);
+      if (projectData.zoomPlan) setZoomPlan(projectData.zoomPlan);
+      
+      // Convert project slides to timeline clips
+      if (projectData.slides && projectData.slides.length > 0) {
+        const slidesAsClips = projectData.slides.map((slide, index) => ({
+          id: Date.now() + index,
+          type: slide.type === 'pdf' ? 'image' : slide.type || 'image',
+          name: slide.name || `Slide ${index + 1}`,
+          src: slide.url ? `${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace('/api', '')}${slide.url}` : null,
+          duration: 5,
+          start: index * 5,
+          color: slide.type === 'pdf' ? 'bg-purple-700' : 'bg-blue-700'
+        }));
+        setTimelineClips(slidesAsClips);
+        console.log('📄 Loaded', slidesAsClips.length, 'slides from project');
+      }
+      
       setLoading(false);
     } catch (error) {
       console.error('Failed to load project:', error);
@@ -290,8 +432,18 @@ export default function ProjectStudio() {
 
             <div className="flex items-center space-x-3">
                  <div className="flex items-center bg-[#1a1d21] rounded-lg p-0.5 border border-gray-800">
-                    <button className="px-3 py-1.5 text-xs font-medium bg-[#23232f] rounded text-white shadow-sm">Video</button>
-                    <button className="px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white transition">Article</button>
+                    <button 
+                        onClick={() => setEditorMode('video')}
+                        className={`px-3 py-1.5 text-xs font-medium rounded transition ${editorMode === 'video' ? 'bg-[#23232f] text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Video
+                    </button>
+                    <button 
+                        onClick={() => setEditorMode('article')}
+                        className={`px-3 py-1.5 text-xs font-medium rounded transition ${editorMode === 'article' ? 'bg-[#23232f] text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        Article
+                    </button>
                  </div>
                  
                  <div className="h-6 w-px bg-gray-800 mx-2"></div>
@@ -316,6 +468,65 @@ export default function ProjectStudio() {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
+            {/* ARTICLE MODE */}
+            {editorMode === 'article' && (
+                <>
+                    {/* Article Editor - Main Content */}
+                    <ArticleEditor 
+                        content={articleContent}
+                        onChange={setArticleContent}
+                        projectName={project?.name}
+                        isLoading={articleLoading}
+                    />
+                    
+                    {/* AI Assistant Panel - Right Sidebar */}
+                    <ArticleAIPanel 
+                        projectId={id}
+                        videoId={project?.videoId || id}
+                        onRewrite={async () => {
+                            setArticleLoading(true);
+                            try {
+                                // Generate article from project data
+                                const response = await aiAPI.processRecording({
+                                    projectId: id,
+                                    rawTranscript: project?.polishedScript || '',
+                                    styleGuidelines: 'Professional technical documentation',
+                                    docUseCase: 'Step-by-step guide'
+                                });
+                                if (response.data.data?.docSteps) {
+                                    // Convert steps to article format
+                                    const article = response.data.data.docSteps
+                                        .map(step => `<h2>${step.title || step.step}</h2><p>${step.description}</p>`)
+                                        .join('\n');
+                                    setArticleContent(article);
+                                }
+                            } catch (error) {
+                                console.error('Failed to generate article:', error);
+                                alert('Failed to generate article. Please try again.');
+                            } finally {
+                                setArticleLoading(false);
+                            }
+                        }}
+                        onImprove={async (instruction) => {
+                            setArticleLoading(true);
+                            try {
+                                // Use AI to improve article based on instruction
+                                console.log('Improving article with:', instruction);
+                                // For now, just log - actual implementation would call backend
+                                alert(`AI will: ${instruction}`);
+                            } catch (error) {
+                                console.error('Failed to improve article:', error);
+                            } finally {
+                                setArticleLoading(false);
+                            }
+                        }}
+                    />
+                </>
+            )}
+
+            {/* VIDEO MODE */}
+            {editorMode === 'video' && (
+            <>
             {/* Left Sidebar (Navigation + Panel) */}
             <div className="w-[360px] flex border-r border-gray-800 bg-[#0f1115]">
                 {/* Icons Rail */}
@@ -335,13 +546,16 @@ export default function ProjectStudio() {
                 <div className="flex-1 bg-[#16181d] flex flex-col h-full overflow-hidden">
                     {activeTab === 'script' && (
                         <ScriptPanel 
-                            projectId={id} 
+                            projectId={id}
+                            videoId={project?.videoId || id}
+                            videoUrl={project?.videoUrl}
                             initialScript={project?.polishedScript}
                             currentTime={currentTime}
                             isPlaying={isPlaying}
                             onAddAudio={handleAddAudio}
                             setGenerating={setIsProcessingAudio}
                             audioClips={audioClips}
+                            onActiveTextChange={(text) => setPreviewText(text)}
                         />
                     )}
                     {activeTab !== 'script' && (
@@ -509,6 +723,24 @@ export default function ProjectStudio() {
                             </div>
                         )}
                     </div>
+
+                    <div className="w-px h-4 bg-gray-700"></div>
+
+                    {/* View Mode Toggle */}
+                    <div className="flex items-center bg-[#23232f] rounded-lg p-0.5 border border-gray-700">
+                        <button 
+                            onClick={() => setViewMode('canvas')}
+                            className={`px-3 py-1 text-xs font-medium rounded transition ${viewMode === 'canvas' ? 'bg-pink-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                        >
+                            Canvas
+                        </button>
+                        <button 
+                            onClick={() => setViewMode('preview')}
+                            className={`px-3 py-1 text-xs font-medium rounded transition ${viewMode === 'preview' ? 'bg-pink-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                        >
+                            Preview
+                        </button>
+                    </div>
                  </div>
 
                 {/* Video Preview Canvas */}
@@ -529,6 +761,20 @@ export default function ProjectStudio() {
                         </div>
                     )}
 
+                    {/* EditorStage Preview Mode */}
+                    {viewMode === 'preview' && (
+                        <div className="w-full h-full flex items-center justify-center">
+                            <EditorStage 
+                                videoUrl={project?.videoUrl || ""}
+                                activeText={previewText}
+                                isPlaying={isPlaying}
+                                currentTime={currentTime}
+                            />
+                        </div>
+                    )}
+
+                    {/* Canvas Mode - Original Preview */}
+                    {viewMode === 'canvas' && (
                     <div className="flex space-x-4 w-full max-w-6xl h-full items-center justify-center">
                         {/* Video Player Container */}
                         <div 
@@ -665,6 +911,7 @@ export default function ProjectStudio() {
                             </div>
                         )}
                     </div>
+                    )}
                 </div>
 
                 {/* Timeline Area (Bottom) */}
@@ -919,6 +1166,8 @@ export default function ProjectStudio() {
                     </div>
                 </div>
             </div>
+            </>
+            )}
         </div>
       </div>
 

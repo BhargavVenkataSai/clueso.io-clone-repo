@@ -6,6 +6,7 @@ const geminiService = require('../services/geminiService');
 /**
  * @route   POST /api/ai/process-recording
  * @desc    Process recording with Gemini to get script, zooms, and docs
+ *          Supports both text-only and video file analysis
  * @access  Private
  */
 const processRecording = async (req, res) => {
@@ -22,13 +23,39 @@ const processRecording = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
 
-    // Call Gemini Service
-    const aiResult = await geminiService.processRecording({
-      rawTranscript: rawTranscript || "Welcome to this tutorial.", // Fallback if empty
-      uiEvents: uiEvents || [],
-      styleGuidelines,
-      docUseCase
-    });
+    let aiResult;
+
+    // Check if a video file was uploaded
+    if (req.file && req.file.path) {
+      console.log(`📹 Video file detected: ${req.file.filename}`);
+      console.log(`📊 File size: ${(req.file.size / 1024 / 1024).toFixed(2)} MB`);
+      
+      // Use video analysis with visual context
+      aiResult = await geminiService.processVideoRecording({
+        videoFilePath: req.file.path,
+        rawTranscript: rawTranscript || "",
+        styleGuidelines,
+        docUseCase
+      });
+      
+      // Clean up uploaded video file after processing
+      const fs = require('fs');
+      try {
+        fs.unlinkSync(req.file.path);
+        console.log(`🗑️  Cleaned up local video file: ${req.file.filename}`);
+      } catch (cleanupError) {
+        console.warn(`⚠️  Failed to cleanup local file: ${cleanupError.message}`);
+      }
+    } else {
+      // Use text-only processing (original behavior)
+      console.log("📝 No video file provided, using text-only processing");
+      aiResult = await geminiService.processRecording({
+        rawTranscript: rawTranscript || "Welcome to this tutorial.",
+        uiEvents: uiEvents || [],
+        styleGuidelines,
+        docUseCase
+      });
+    }
 
     // Update Project with results
     project.polishedScript = aiResult.polished_script;
@@ -104,7 +131,91 @@ const summarizeProject = async (req, res) => {
   }
 };
 
+/**
+ * @route   POST /api/ai/video-aware-rewrite
+ * @desc    Rewrite script based on video analysis
+ * @access  Private
+ */
+const videoAwareRewrite = async (req, res) => {
+  try {
+    const { videoId, videoUrl, currentText } = req.body;
+
+    if (!currentText) {
+      return res.status(400).json({ success: false, error: 'Current text is required' });
+    }
+
+    if (!videoId && !videoUrl) {
+      return res.status(400).json({ success: false, error: 'Video ID or video URL is required' });
+    }
+
+    const path = require('path');
+    const fs = require('fs');
+    let videoFilePath = null;
+
+    // Try to find video by ID first
+    if (videoId) {
+      try {
+        const Video = require('../models/Video');
+        const video = await Video.findById(videoId);
+        
+        if (video && video.files?.original?.filename) {
+          videoFilePath = path.join(__dirname, '../uploads', video.files.original.filename);
+        } else if (video && video.filename) {
+          videoFilePath = path.join(__dirname, '../uploads', video.filename);
+        }
+      } catch (err) {
+        console.log('Video not found in database, trying alternative methods...');
+      }
+    }
+
+    // If no video found by ID, try to use videoUrl
+    if (!videoFilePath && videoUrl) {
+      // videoUrl might be like "/uploads/video-123.mp4" - extract the filename
+      const urlPath = videoUrl.startsWith('/') ? videoUrl : `/${videoUrl}`;
+      const filename = path.basename(urlPath);
+      videoFilePath = path.join(__dirname, '../uploads', filename);
+      
+      // If that doesn't exist, try the full relative path
+      if (!fs.existsSync(videoFilePath)) {
+        videoFilePath = path.join(__dirname, '..', urlPath.replace(/^\//, ''));
+      }
+    }
+
+    // Check if video file exists
+    if (!videoFilePath || !fs.existsSync(videoFilePath)) {
+      console.log(`❌ Video/document file not found. Attempted path: ${videoFilePath}`);
+      console.log(`VideoId: ${videoId}, VideoUrl: ${videoUrl}`);
+      
+      return res.status(404).json({
+        success: false,
+        error: 'No video or document file found. Please upload a video, DOCX, or PDF file first to use AI Rewrite with context.'
+      });
+    }
+
+    console.log(`🎬 Analyzing video for AI rewrite: ${videoFilePath}`);
+
+    // Use Gemini to analyze video and rewrite text
+    const rewrittenText = await geminiService.generateVideoAwareRewrite(videoFilePath, currentText);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        rewrittenText: rewrittenText,
+        videoAnalyzed: true
+      }
+    });
+
+  } catch (error) {
+    console.error('Video-aware rewrite error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to rewrite with video analysis'
+    });
+  }
+};
+
 module.exports = {
   summarizeProject,
-  processRecording
+  processRecording,
+  videoAwareRewrite
 };

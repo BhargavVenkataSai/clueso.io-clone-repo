@@ -8,20 +8,18 @@ export default function NewProjectModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [file, setFile] = useState(null);
+  const [selectedOption, setSelectedOption] = useState(null);
   const [processingStatus, setProcessingStatus] = useState('');
-  const [step, setStep] = useState('selection'); // 'selection' or 'details'
-  const [projectType, setProjectType] = useState(''); // 'blank', 'recording', 'video', 'slide'
 
   const handleOptionSelect = (type) => {
-    setProjectType(type);
-    setStep('details');
+    setSelectedOption(type);
   };
 
   const handleBack = () => {
-    setStep('selection');
-    setProjectType('');
+    setSelectedOption(null);
     setFile(null);
     setError('');
+    setProcessingStatus('');
   };
 
   const handleFileChange = (e) => {
@@ -48,40 +46,14 @@ export default function NewProjectModal({ isOpen, onClose }) {
         formData.append('file', file);
         
         if (file.type === 'application/pdf') {
-            setProcessingStatus('Processing PDF slides...');
-            try {
-                const pdfjsLib = await import('pdfjs-dist');
-                pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-                
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    setProcessingStatus(`Processing slide ${i} of ${pdf.numPages}...`);
-                    const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 2.0 });
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-                    
-                    await page.render({ canvasContext: context, viewport: viewport }).promise;
-                    
-                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
-                    formData.append('slides', blob, `slide-${i}.jpg`);
-                }
-            } catch (err) {
-                console.error("PDF Processing Error", err);
-                setError("Failed to process PDF. Please try again.");
-                setLoading(false);
-                setProcessingStatus('');
-                return;
-            }
-<<<<<<< HEAD
-=======
+            // Let backend handle PDF-to-PNG conversion
+            setProcessingStatus('Uploading PDF for processing...');
         } else if (file.type.startsWith('image/')) {
             // For images, treat the image itself as the single slide
             formData.append('slides', file, 'slide-1.jpg');
->>>>>>> fc79f4c (Update project structure and backend logic)
+        } else if (file.type.startsWith('video/')) {
+            // Video files will be uploaded separately after project creation
+            setProcessingStatus('Video will be uploaded after project creation...');
         }
     }
 
@@ -90,6 +62,21 @@ export default function NewProjectModal({ isOpen, onClose }) {
     try {
       const response = await projectAPI.create(formData);
       const project = response.data.data;
+      
+      // If a video file was selected, upload it to the project
+      if (file && file.type.startsWith('video/')) {
+        setProcessingStatus('Uploading video...');
+        try {
+          const videoFormData = new FormData();
+          videoFormData.append('video', file);
+          await projectAPI.uploadVideo(project._id, videoFormData);
+          console.log('✅ Video uploaded successfully');
+        } catch (videoErr) {
+          console.error('Failed to upload video:', videoErr);
+          // Don't fail project creation, just log the error
+        }
+      }
+      
       router.push(`/projects/${project._id}`);
       onClose();
     } catch (err) {
@@ -199,7 +186,7 @@ export default function NewProjectModal({ isOpen, onClose }) {
               <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-[#0f1115] border border-gray-800 p-6 text-left align-middle shadow-xl transition-all">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center space-x-3">
-                    {step === 'details' && (
+                    {selectedOption && (
                       <button 
                         onClick={handleBack}
                         className="p-1 rounded-full hover:bg-gray-800 text-gray-400 hover:text-white transition-colors"
@@ -211,9 +198,9 @@ export default function NewProjectModal({ isOpen, onClose }) {
                     )}
                     <div>
                       <Dialog.Title as="h3" className="text-xl font-bold leading-6 text-white">
-                        {step === 'selection' ? 'New project' : 'Project Details'}
+                        {!selectedOption ? 'New project' : 'Project Details'}
                       </Dialog.Title>
-                      {step === 'selection' && (
+                      {!selectedOption && (
                         <p className="text-sm text-gray-400 mt-1">Clueso creates stunning videos and step-by-step guides</p>
                       )}
                     </div>
@@ -231,7 +218,7 @@ export default function NewProjectModal({ isOpen, onClose }) {
                   </div>
                 )}
 
-                {step === 'selection' ? renderSelection() : (
+                {!selectedOption ? renderSelection() : (
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-400 mb-1">
@@ -258,24 +245,16 @@ export default function NewProjectModal({ isOpen, onClose }) {
                       />
                     </div>
 
-                    {projectType === 'slide' && (
+                    {selectedOption === 'slide' && (
                       <div>
                         <label className="block text-sm font-medium text-gray-400 mb-1">
-<<<<<<< HEAD
-                          Upload Document (PDF, DOCX, TXT)
-=======
-                          Upload Document (PDF, Images)
->>>>>>> fc79f4c (Update project structure and backend logic)
+                          Upload Document (PDF, DOCX, TXT, Images)
                         </label>
                         <div className="relative border-2 border-dashed border-gray-700 rounded-lg p-6 hover:border-blue-500 transition-colors">
                             <input
                                 type="file"
                                 onChange={handleFileChange}
-<<<<<<< HEAD
-                                accept=".pdf,.docx,.txt"
-=======
-                                accept=".pdf,.png,.jpg,.jpeg"
->>>>>>> fc79f4c (Update project structure and backend logic)
+                                accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             />
                             <div className="text-center">
@@ -292,11 +271,7 @@ export default function NewProjectModal({ isOpen, onClose }) {
                                             Click to upload or drag and drop
                                         </p>
                                         <p className="text-xs text-gray-500 mt-1">
-<<<<<<< HEAD
-                                            PDF, DOCX, or TXT
-=======
-                                            PDF, PNG, JPG
->>>>>>> fc79f4c (Update project structure and backend logic)
+                                            PDF, DOCX, TXT, PNG, JPG
                                         </p>
                                     </>
                                 )}
@@ -305,7 +280,7 @@ export default function NewProjectModal({ isOpen, onClose }) {
                       </div>
                     )}
 
-                    {projectType === 'video' && (
+                    {selectedOption === 'video' && (
                       <div>
                         <label className="block text-sm font-medium text-gray-400 mb-1">
                           Upload Video (MP4, MOV)

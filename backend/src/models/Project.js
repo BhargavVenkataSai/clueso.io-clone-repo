@@ -99,6 +99,22 @@ const projectSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // Video/Media file references
+  videoUrl: {
+    type: String,
+    trim: true,
+    comment: 'URL/path to the uploaded video file'
+  },
+  videoId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Video',
+    comment: 'Reference to Video document if created'
+  },
+  videoFilename: {
+    type: String,
+    trim: true,
+    comment: 'Original filename of the uploaded video'
+  },
   // AI Generated Content
   polishedScript: {
     type: String,

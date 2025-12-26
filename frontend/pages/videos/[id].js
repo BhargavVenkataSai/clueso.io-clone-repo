@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '../../contexts/AuthContext';
 import { videoAPI } from '../../lib/api';
 import ScriptPanel from '../../components/studio/ScriptPanel';
+import EditorStage from '../studio/EditorStage';
 
 export default function VideoEditor() {
   const { user, loading: authLoading } = useAuth();
@@ -20,6 +21,9 @@ export default function VideoEditor() {
   const [duration, setDuration] = useState(300); // 5 mins
   const [isPlaying, setIsPlaying] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(50);
+
+  // NEW STATE for Text Sync with EditorStage
+  const [previewText, setPreviewText] = useState("Let's dive in.");
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -118,7 +122,13 @@ export default function VideoEditor() {
 
                 {/* Content Panel */}
                 <div className="flex-1 bg-[#16181d] flex flex-col h-full overflow-hidden">
-                    {activeTab === 'script' && <ScriptPanel projectId={id} />}
+                    {activeTab === 'script' && (
+                        <ScriptPanel 
+                            projectId={id} 
+                            videoId={id}
+                            onActiveTextChange={(text) => setPreviewText(text)}
+                        />
+                    )}
                     {activeTab !== 'script' && (
                         <div className="flex items-center justify-center h-full text-gray-500 text-sm">
                             <p>Panel ({activeTab}) coming soon</p>
@@ -148,26 +158,13 @@ export default function VideoEditor() {
                     </button>
                  </div>
 
-                {/* Video Preview Canvas */}
-                <div className="flex-1 flex items-center justify-center p-8">
-                    <div className="aspect-video w-full max-w-4xl bg-white rounded-lg shadow-2xl relative overflow-hidden group">
-                        {/* Video Content */}
-                        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-                             {/* Placeholder or Actual Video */}
-                             <div className="text-center">
-                                 <svg className="w-16 h-16 text-gray-700 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                 <p className="text-gray-500 text-sm">Preview Canvas</p>
-                             </div>
-                        </div>
-
-                         {/* Hover overlay hint */}
-                        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition duration-300">
-                             <div className="bg-black/80 backdrop-blur text-white text-xs px-3 py-1.5 rounded-full border border-gray-700 shadow-lg">
-                                 Click on "Generate Speech" to update the voiceover
-                             </div>
-                        </div>
-                    </div>
-                </div>
+                {/* Video Preview Canvas - REPLACED WITH EditorStage */}
+                <EditorStage 
+                    videoUrl={video?.files?.original?.path || video?.filename ? `/uploads/${video.filename}` : ""}
+                    activeText={previewText}
+                    isPlaying={isPlaying}
+                    currentTime={currentTime}
+                />
 
                 {/* Timeline Area (Bottom) */}
                 <div className="h-48 bg-[#16181d] border-t border-gray-800 flex flex-col">

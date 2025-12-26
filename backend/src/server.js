@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
+const { testGemini, testElevenLabs } = require('./services/aiHealthCheck');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -116,11 +117,46 @@ app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => {
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
+// Function to check AI services on startup
+async function checkAIServices() {
+  console.log('\n🔍 Checking AI Services...');
+  
+  // Check Gemini
+  const geminiResult = await testGemini();
+  if (geminiResult.status === 'success') {
+    console.log(`   ✅ Gemini AI: Connected (${geminiResult.latency})`);
+  } else if (geminiResult.status === 'rate_limited') {
+    console.log(`   ⚠️  Gemini AI: Rate limited (will retry later)`);
+  } else {
+    console.log(`   ❌ Gemini AI: ${geminiResult.message}`);
+  }
+
+  // Check ElevenLabs
+  const elevenLabsResult = await testElevenLabs();
+  if (elevenLabsResult.status === 'success') {
+    console.log(`   ✅ ElevenLabs TTS: Connected (${elevenLabsResult.voices_available} voices, ${elevenLabsResult.latency})`);
+  } else {
+    console.log(`   ❌ ElevenLabs TTS: ${elevenLabsResult.message}`);
+    console.log(`   ⚠️  Fallback: Google TTS will be used`);
+  }
+
+  console.log('');
+}
+
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  console.log('\n╔════════════════════════════════════════════╗');
+  console.log('║     🎬 CLUESO CLONE - VIDEO PLATFORM       ║');
+  console.log('╚════════════════════════════════════════════╝\n');
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 Backend URL: http://localhost:${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Check AI services after startup
+  await checkAIServices();
+  
+  console.log('✨ Server is ready to accept requests!\n');
 });
 
 module.exports = app;
+

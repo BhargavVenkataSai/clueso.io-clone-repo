@@ -61,6 +61,9 @@ export const projectAPI = {
   getById: (id) => api.get(`/projects/${id}`),
   update: (id, data) => api.put(`/projects/${id}`, data),
   delete: (id) => api.delete(`/projects/${id}`),
+  uploadVideo: (projectId, formData) => api.post(`/projects/${projectId}/upload-video`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
 };
 
 // Video API
@@ -92,6 +95,7 @@ export const ragAPI = {
 export const aiAPI = {
   summarizeProject: (projectId) => api.post(`/ai/summarize/${projectId}`),
   processRecording: (data) => api.post('/ai/process-recording', data),
+  videoAwareRewrite: (data) => api.post('/ai/video-aware-rewrite', data),
 };
 
 // Documentation API

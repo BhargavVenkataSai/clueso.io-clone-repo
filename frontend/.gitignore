@@ -5,3 +5,7 @@ out/
 *.log
 .env*.local
 .vercel
+backend/src/uploads/*
+backend/test-ai.js
+backend/test-pdf.js
+backend/test-slide.png

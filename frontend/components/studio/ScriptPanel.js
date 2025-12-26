@@ -14,13 +14,14 @@ const VOICES = [
     { id: 'emily', name: 'Emily', gender: 'female', color: 'text-orange-400' },
 ];
 
-export default function ScriptPanel({ projectId, onAddAudio, initialScript, currentTime, isPlaying, setGenerating: setParentGenerating, audioClips }) {
+export default function ScriptPanel({ projectId, videoId, videoUrl, onAddAudio, initialScript, currentTime, isPlaying, setGenerating: setParentGenerating, audioClips, onActiveTextChange }) {
     const [slides, setSlides] = useState([
         { id: 1, title: 'Slide 1', text: initialScript || '', voice: 'amrit', alignment: null }
     ]);
     const [generating, setGenerating] = useState(false);
     const [processingAI, setProcessingAI] = useState(false);
     const [activeVoiceMenu, setActiveVoiceMenu] = useState(null);
+    const [activeSlideId, setActiveSlideId] = useState(1); // Track which slide is active/selected
 
     // Sync local generating state with parent
     useEffect(() => {
@@ -29,11 +30,56 @@ export default function ScriptPanel({ projectId, onAddAudio, initialScript, curr
         }
     }, [generating, setParentGenerating]);
 
+    // Parse initial script and split into separate slides
     useEffect(() => {
-        if (initialScript && slides.length === 1 && slides[0].text === '') {
-            setSlides([{ id: 1, title: 'Slide 1', text: initialScript, voice: 'amrit' }]);
+        if (initialScript) {
+            // Try to parse "Slide N:\n..." format
+            const slidePattern = /Slide\s+(\d+):\s*/gi;
+            const parts = initialScript.split(slidePattern).filter(p => p.trim());
+            
+            if (parts.length > 1) {
+                // We have multiple slides in format "Slide 1:\ntext\n\nSlide 2:\ntext"
+                const parsedSlides = [];
+                for (let i = 0; i < parts.length; i += 2) {
+                    const slideNum = parseInt(parts[i], 10);
+                    const slideText = parts[i + 1]?.trim() || '';
+                    if (!isNaN(slideNum) && slideText) {
+                        parsedSlides.push({
+                            id: slideNum,
+                            title: `Slide ${slideNum}`,
+                            text: slideText,
+                            voice: slideNum % 2 === 0 ? 'sammy' : 'amrit',
+                            alignment: null
+                        });
+                    }
+                }
+                
+                if (parsedSlides.length > 0) {
+                    setSlides(parsedSlides);
+                    setActiveSlideId(parsedSlides[0].id);
+                    if (onActiveTextChange) {
+                        onActiveTextChange(parsedSlides[0].text);
+                    }
+                    console.log('📄 Parsed', parsedSlides.length, 'slides from script');
+                    return;
+                }
+            }
+            
+            // Fallback: single slide with all text
+            setSlides([{ id: 1, title: 'Slide 1', text: initialScript, voice: 'amrit', alignment: null }]);
+            if (onActiveTextChange) {
+                onActiveTextChange(initialScript);
+            }
         }
     }, [initialScript]);
+
+    // Notify parent when active slide changes
+    useEffect(() => {
+        const activeSlide = slides.find(s => s.id === activeSlideId);
+        if (activeSlide && onActiveTextChange) {
+            onActiveTextChange(activeSlide.text);
+        }
+    }, [activeSlideId, slides, onActiveTextChange]);
 
     const handleAddSlide = () => {
         const newId = slides.length + 1;
@@ -49,6 +95,16 @@ export default function ScriptPanel({ projectId, onAddAudio, initialScript, curr
         setSlides(slides.map(slide => 
             slide.id === id ? { ...slide, text: newText } : slide
         ));
+        
+        // Notify parent immediately if this is the active slide
+        if (id === activeSlideId && onActiveTextChange) {
+            onActiveTextChange(newText);
+        }
+    };
+
+    const handleSlideClick = (id) => {
+        setActiveSlideId(id);
+        // Parent will be notified via useEffect
     };
 
     const handleVoiceChange = (id, newVoiceId) => {
@@ -63,37 +119,93 @@ export default function ScriptPanel({ projectId, onAddAudio, initialScript, curr
         setSlides(slides.filter(s => s.id !== id));
     };
 
+    // Individual slide audio playback
+    const [currentAudio, setCurrentAudio] = useState(null);
+    const [playingSlideId, setPlayingSlideId] = useState(null);
+
+    const playSlideAudio = (slide) => {
+        // Stop any currently playing audio
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.currentTime = 0;
+        }
+
+        if (!slide.audioUrl) {
+            alert('No audio generated for this slide. Click "Generate Speech" first.');
+            return;
+        }
+
+        const audio = new Audio(slide.audioUrl);
+        setCurrentAudio(audio);
+        setPlayingSlideId(slide.id);
+
+        audio.play().catch(e => console.error('Audio play failed:', e));
+
+        audio.addEventListener('ended', () => {
+            setPlayingSlideId(null);
+            setCurrentAudio(null);
+        });
+    };
+
+    const stopAudio = () => {
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.currentTime = 0;
+            setCurrentAudio(null);
+            setPlayingSlideId(null);
+        }
+    };
+
     const handleProcessWithAI = async () => {
         setProcessingAI(true);
         try {
-            // Combine all text for context
-            const fullText = slides.map(s => s.text).join('\n');
+            // Get the active slide's text
+            const activeSlide = slides.find(s => s.id === activeSlideId);
+            const currentText = activeSlide?.text || '';
             
-            const mockData = {
-                projectId,
-                rawTranscript: fullText,
-                uiEvents: [],
-                styleGuidelines: "Professional and concise",
-                docUseCase: "Tutorial"
-            };
+            if (!currentText.trim()) {
+                alert('Please enter some text first');
+                setProcessingAI(false);
+                return;
+            }
 
-            const response = await aiAPI.processRecording(mockData);
-            const { polishedScript } = response.data.data;
+            if (!videoId && !videoUrl) {
+                alert('No video found. Please upload a video first.');
+                setProcessingAI(false);
+                return;
+            }
+
+            console.log('🎬 Analyzing video and rewriting text...');
+            console.log('VideoId:', videoId, 'VideoUrl:', videoUrl);
             
-            if (polishedScript) {
-                // Simple split logic for demo - in reality, AI might return structured segments
-                const segments = polishedScript.split('\n\n').filter(s => s.trim());
-                const newSlides = segments.map((text, idx) => ({
-                    id: idx + 1,
-                    title: `Slide ${idx + 1}`,
-                    text: text.trim(),
-                    voice: slides[idx % slides.length]?.voice || 'amrit'
-                }));
-                setSlides(newSlides);
+            // Use video-aware rewrite API with both videoId and videoUrl
+            const response = await aiAPI.videoAwareRewrite({
+                videoId: videoId,
+                videoUrl: videoUrl,
+                currentText: currentText
+            });
+            
+            const { rewrittenText } = response.data.data;
+            
+            if (rewrittenText) {
+                // Update the active slide with the rewritten text
+                setSlides(slides.map(slide => 
+                    slide.id === activeSlideId 
+                        ? { ...slide, text: rewrittenText } 
+                        : slide
+                ));
+                
+                // Notify parent of text change
+                if (onActiveTextChange) {
+                    onActiveTextChange(rewrittenText);
+                }
+                
+                console.log('✅ Text rewritten based on video analysis!');
             }
         } catch (error) {
-            console.error("AI Processing failed:", error);
-            alert("Failed to process with AI");
+            console.error("❌ AI Processing failed:", error);
+            const errorMsg = error.response?.data?.error || 'Failed to process with AI. The video may be too large or the API is rate-limited.';
+            alert(errorMsg);
         } finally {
             setProcessingAI(false);
         }
@@ -116,18 +228,47 @@ export default function ScriptPanel({ projectId, onAddAudio, initialScript, curr
 
                 const alignment = res.data.data.word_alignment;
 
-                // Update slide with alignment data
-                setSlides(prev => prev.map(s => s.id === slide.id ? { ...s, alignment } : s));
+                // Fetch audio as Blob and create Blob URL for storage
+            try {
+                const audioResponse = await fetch(audioUrl);
+                if (!audioResponse.ok) {
+                    throw new Error(`Failed to fetch audio: ${audioResponse.statusText}`);
+                }
                 
-                // Add to timeline (mock callback)
-                if (onAddAudio) {
-                    onAddAudio({
-                        url: audioUrl,
-                        text: slide.text,
-                        duration: res.data.data.duration_estimate,
-                        voice: slide.voice,
-                        slideId: slide.id
-                    });
+                const audioBlob = await audioResponse.blob();
+                const blobUrl = URL.createObjectURL(audioBlob);
+                
+                console.log("Audio generated for slide:", slide.id, "URL:", blobUrl);
+                
+                // Store audio URL in slide state (don't auto-play)
+                setSlides(prev => prev.map(s => s.id === slide.id ? { ...s, audioUrl: blobUrl, alignment } : s));
+                    
+                    // Add to timeline with Blob URL (mock callback)
+                    if (onAddAudio) {
+                        onAddAudio({
+                            url: blobUrl, // Use Blob URL instead of server URL
+                            text: slide.text,
+                            duration: res.data.data.duration_estimate,
+                            voice: slide.voice,
+                            slideId: slide.id,
+                            wordAlignment: alignment // Pass word alignment for karaoke
+                        });
+                    }
+                } catch (fetchError) {
+                    console.error("Failed to fetch or play audio:", fetchError);
+                    // Fallback to original URL if Blob fetch fails
+                    setSlides(prev => prev.map(s => s.id === slide.id ? { ...s, alignment } : s));
+                    
+                    if (onAddAudio) {
+                        onAddAudio({
+                            url: audioUrl,
+                            text: slide.text,
+                            duration: res.data.data.duration_estimate,
+                            voice: slide.voice,
+                            slideId: slide.id,
+                            wordAlignment: alignment // Pass word alignment for karaoke
+                        });
+                    }
                 }
             }
             // alert("Speech generation complete!"); // Removed alert for smoother UX
@@ -186,7 +327,15 @@ export default function ScriptPanel({ projectId, onAddAudio, initialScript, curr
                     const slideStartTime = slideAudioClip ? slideAudioClip.startTime : 0;
 
                     return (
-                        <div key={slide.id} className="bg-[#16181d] border border-gray-800 rounded-lg p-4 group hover:border-gray-700 transition-colors">
+                        <div 
+                            key={slide.id} 
+                            onClick={() => handleSlideClick(slide.id)}
+                            className={`relative backdrop-blur-md rounded-xl p-4 group transition-all cursor-pointer ${
+                                activeSlideId === slide.id 
+                                    ? 'bg-white/[0.08] border border-purple-500/40 shadow-lg shadow-purple-500/10' 
+                                    : 'bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] hover:border-white/[0.15]'
+                            }`}
+                        >
                             {/* Slide Header */}
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center space-x-3">
@@ -206,7 +355,7 @@ export default function ScriptPanel({ projectId, onAddAudio, initialScript, curr
                                         </button>
 
                                         {activeVoiceMenu === slide.id && (
-                                            <div className="absolute right-0 top-full mt-2 w-48 bg-[#1a1d21] border border-gray-700 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+                                            <div className="absolute right-0 top-full mt-2 w-48 bg-[#1a1d21]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl z-50 max-h-64 overflow-y-auto">
                                                 <div className="p-2 text-[10px] font-bold text-gray-500 uppercase">Male Voices</div>
                                                 {VOICES.filter(v => v.gender === 'male').map(voice => (
                                                     <button
@@ -238,6 +387,20 @@ export default function ScriptPanel({ projectId, onAddAudio, initialScript, curr
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" /></svg>
                                     </button>
                                     
+                                    {/* Play Audio Button */}
+                                    <button 
+                                        onClick={() => playingSlideId === slide.id ? stopAudio() : playSlideAudio(slide)}
+                                        className={`p-1 rounded ${slide.audioUrl ? 'text-green-400 hover:text-green-300' : 'text-gray-600 cursor-not-allowed'}`}
+                                        title={slide.audioUrl ? (playingSlideId === slide.id ? 'Stop' : 'Play Audio') : 'No audio - Generate speech first'}
+                                        disabled={!slide.audioUrl}
+                                    >
+                                        {playingSlideId === slide.id ? (
+                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                                        ) : (
+                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                        )}
+                                    </button>
+                                    
                                     {/* Delete Slide */}
                                     <button 
                                         onClick={() => handleDeleteSlide(slide.id)}
@@ -262,7 +425,7 @@ export default function ScriptPanel({ projectId, onAddAudio, initialScript, curr
                                     value={slide.text}
                                     onChange={(e) => handleTextChange(slide.id, e.target.value)}
                                     placeholder="Enter script here..."
-                                    className="w-full bg-[#0f1115] text-gray-300 text-sm p-3 rounded border border-gray-800 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none resize-none min-h-[100px] leading-relaxed overflow-hidden"
+                                    className="w-full bg-black/30 backdrop-blur-sm text-gray-200 text-sm p-4 rounded-lg border border-white/[0.06] focus:border-purple-500/50 focus:bg-black/40 outline-none resize-none min-h-[120px] leading-relaxed overflow-hidden transition-all placeholder-gray-500"
                                 />
                             )}
                         </div>

@@ -7,7 +7,8 @@ const {
   getProjects,
   getProject,
   updateProject,
-  deleteProject
+  deleteProject,
+  uploadProjectVideo
 } = require('../controllers/projectController');
 
 // All routes require authentication
@@ -19,4 +20,8 @@ router.get('/:id', getProject);
 router.put('/:id', updateProject);
 router.delete('/:id', deleteProject);
 
+// Upload video for a project
+router.post('/:id/upload-video', upload.single('video'), uploadProjectVideo);
+
 module.exports = router;
+

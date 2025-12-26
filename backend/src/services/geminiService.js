@@ -1,11 +1,16 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { GoogleAIFileManager } = require("@google/generative-ai/server");
+const fs = require('fs');
+const path = require('path');
 
-// Initialize Gemini API
+// Initialize Gemini API and File Manager
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "STUB_KEY");
+const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY || "STUB_KEY");
 
 // Model Constants
 const MODEL_FLASH = 'gemini-2.5-flash';
 const MODEL_FLASH_LITE = 'gemini-2.5-flash-lite';
+const MODEL_VIDEO = 'gemini-1.5-flash'; // Optimized for video multimodal tasks
 
 /**
  * Cleans and polishes the raw transcript segments into a cohesive script.
@@ -115,6 +120,188 @@ const generateArticle = async (steps) => {
     } catch (error) {
         console.error("Gemini generateArticle error:", error);
         return "# Error Generating Article\n\nPlease try again later.";
+    }
+};
+
+/**
+ * Uploads a video file to Google GenAI for analysis
+ * @param {string} filePath - Path to the video file on disk
+ * @returns {Promise<string>} File URI for use in Gemini API
+ */
+const uploadVideoToGemini = async (filePath) => {
+    try {
+        console.log("📤 Uploading video to Google File Manager...");
+        
+        const uploadResult = await fileManager.uploadFile(filePath, {
+            mimeType: "video/mp4", // Adjust if you support other formats
+            displayName: "User Recording",
+        });
+        
+        console.log(`✅ Upload complete: ${uploadResult.file.name}`);
+        console.log(`⏳ Waiting for processing (initial state: ${uploadResult.file.state})...`);
+        
+        let file = await fileManager.getFile(uploadResult.file.name);
+        let attempts = 0;
+        const maxAttempts = 60; // 2 minutes max
+        
+        // Wait for processing to complete
+        while (file.state === "PROCESSING" && attempts < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            file = await fileManager.getFile(uploadResult.file.name);
+            attempts++;
+            
+            if (attempts % 5 === 0) {
+                console.log(`⏳ Still processing... (${attempts * 2}s elapsed)`);
+            }
+        }
+        
+        if (file.state === "FAILED") {
+            throw new Error("Video processing failed by Gemini.");
+        }
+        
+        if (file.state === "PROCESSING") {
+            throw new Error("Video processing timeout - file may be too large");
+        }
+        
+        console.log(`✅ Video ready for analysis: ${file.uri}`);
+        return file.uri;
+    } catch (error) {
+        console.error("❌ Gemini Upload Error:", error);
+        throw error;
+    }
+};
+
+/**
+ * Rewrites script based on Visual Video Context + Current Text
+ * @param {string} videoFilePath - Path to video file
+ * @param {string} currentText - Current script text
+ * @returns {Promise<string>} Rewritten script based on visual context
+ */
+const generateVideoAwareRewrite = async (videoFilePath, currentText) => {
+    const model = genAI.getGenerativeModel({ model: MODEL_VIDEO });
+    
+    try {
+        // 1. Upload Video
+        const fileUri = await uploadVideoToGemini(videoFilePath);
+        
+        // 2. Prompt with Video AND Text
+        const prompt = `
+        You are an expert video editor and copywriter.
+        I will provide a video and a draft script segment.
+        
+        Task:
+        Watch the video segment provided.
+        Rewrite the "Draft Script" to perfectly match the actions occurring on screen.
+        - If the user clicks a button, mention it.
+        - If the screen changes, reflect that in the narration.
+        - Make it professional, concise, and engaging.
+        - Keep the tone conversational.
+        
+        Draft Script: "${currentText}"
+        `;
+
+        console.log("🤖 Generating video-aware rewrite...");
+        const result = await model.generateContent([
+            { fileData: { mimeType: "video/mp4", fileUri: fileUri } },
+            { text: prompt },
+        ]);
+        
+        const rewrittenText = result.response.text();
+        console.log("✅ Video-aware rewrite complete!");
+        return rewrittenText;
+    } catch (error) {
+        console.error("❌ Gemini Rewrite Error:", error);
+        console.log("⚠️  Falling back to original text");
+        return currentText; // Fallback
+    }
+};
+
+/**
+ * Processes a video recording by uploading to Google File Manager and analyzing visual content.
+ * 
+ * @param {Object} params
+ * @param {string} params.videoFilePath - Path to the video file on disk
+ * @param {string} params.rawTranscript - Optional raw transcript text
+ * @param {string} params.styleGuidelines - Style guidelines for the script
+ * @param {string} params.docUseCase - Use case for documentation
+ * @returns {Promise<Object>} { polished_script, step_by_step_doc, zoom_plan }
+ */
+const processVideoRecording = async ({ videoFilePath, rawTranscript, styleGuidelines, docUseCase }) => {
+    try {
+        console.log("📹 Processing video file for visual analysis...");
+        
+        // Upload video to Gemini File Manager
+        const fileUri = await uploadVideoToGemini(videoFilePath);
+        
+        // Generate content with video context
+        const model = genAI.getGenerativeModel({ model: MODEL_VIDEO });
+        
+        const prompt = `
+        You are an expert video editor and technical writer with visual analysis capabilities.
+        Analyze this screen recording video to understand what's happening on screen.
+        
+        Context:
+        - Style Guidelines: ${styleGuidelines || 'Professional'}
+        - Use Case: ${docUseCase || 'General Tutorial'}
+        ${rawTranscript ? `- Raw Transcript (for reference): "${rawTranscript}"` : ''}
+        
+        Task:
+        1. WATCH the video carefully and observe all UI interactions, mouse movements, and screen changes
+        2. Generate a polished, professional voiceover script that describes what you SEE happening
+        3. Extract step-by-step instructions based on the VISUAL actions you observe
+        4. Suggest zoom/highlight actions for specific UI elements you see (with timestamps)
+        5. If a transcript is provided, use it to enhance context but prioritize what you see visually
+        
+        Important:
+        - Reference specific UI elements, buttons, menus, and visual changes you observe
+        - Include timestamps for key moments in the video
+        - Make the script match the visual flow of the video
+        
+        Return JSON only (no markdown, no explanations):
+        {
+            "polished_script": "A natural, engaging script that narrates what's shown in the video",
+            "step_by_step_doc": [
+                {
+                    "title": "Step title based on visual action",
+                    "description": "Detailed description of what you see happening",
+                    "timestamp": 0
+                }
+            ],
+            "zoom_plan": [
+                {
+                    "timestamp": 0,
+                    "target": "Specific UI element you see (e.g., 'Login button in top-right')",
+                    "reason": "Why this element is important to highlight"
+                }
+            ]
+        }
+        `;
+        
+        console.log("🤖 Generating content with visual context...");
+        const result = await model.generateContent([
+            { fileData: { mimeType: "video/mp4", fileUri: fileUri } },
+            { text: prompt }
+        ]);
+        
+        const text = result.response.text();
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsedResult = JSON.parse(jsonStr);
+        
+        console.log("✅ Generated video-aware content successfully!");
+        
+        return parsedResult;
+        
+    } catch (error) {
+        console.error("❌ Video processing error:", error);
+        console.log("⚠️  Falling back to text-only processing...");
+        
+        // Fallback to text-only processing
+        return processRecording({ 
+            rawTranscript: rawTranscript || "Video analysis failed. Please provide a transcript.", 
+            uiEvents: [], 
+            styleGuidelines, 
+            docUseCase 
+        });
     }
 };
 
@@ -240,7 +427,6 @@ const generateImageScript = async (imagePath) => {
     }
 };
 
-<<<<<<< HEAD
 /**
  * Generate a video script from document text
  * @param {string} text - The extracted text from the document
@@ -273,15 +459,14 @@ const generateScriptFromDocument = async (text) => {
 };
 
 module.exports = {
-  processRecording,
-  generateScriptFromDocument
-=======
-module.exports = {
     cleanScript,
     generateSteps,
     generateArticle,
     processRecording,
+    processVideoRecording,
+    uploadVideoToGemini,
+    generateVideoAwareRewrite,
     generateSlideScript,
-    generateImageScript
->>>>>>> fc79f4c (Update project structure and backend logic)
+    generateImageScript,
+    generateScriptFromDocument
 };
