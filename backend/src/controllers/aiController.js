@@ -133,24 +133,20 @@ const summarizeProject = async (req, res) => {
 
 /**
  * @route   POST /api/ai/video-aware-rewrite
- * @desc    Rewrite script based on video analysis
+ * @desc    Rewrite script based on video/image analysis
  * @access  Private
  */
 const videoAwareRewrite = async (req, res) => {
   try {
-    const { videoId, videoUrl, currentText } = req.body;
+    const { videoId, videoUrl, currentText, projectId } = req.body;
 
-    if (!currentText) {
-      return res.status(400).json({ success: false, error: 'Current text is required' });
-    }
-
-    if (!videoId && !videoUrl) {
-      return res.status(400).json({ success: false, error: 'Video ID or video URL is required' });
-    }
+    // currentText can be empty - AI will generate script from analysis
+    const textToProcess = currentText || '';
 
     const path = require('path');
     const fs = require('fs');
-    let videoFilePath = null;
+    let mediaFilePath = null;
+    let mediaType = 'video'; // 'video' or 'image'
 
     // Try to find video by ID first
     if (videoId) {
@@ -159,9 +155,9 @@ const videoAwareRewrite = async (req, res) => {
         const video = await Video.findById(videoId);
         
         if (video && video.files?.original?.filename) {
-          videoFilePath = path.join(__dirname, '../uploads', video.files.original.filename);
+          mediaFilePath = path.join(__dirname, '../uploads', video.files.original.filename);
         } else if (video && video.filename) {
-          videoFilePath = path.join(__dirname, '../uploads', video.filename);
+          mediaFilePath = path.join(__dirname, '../uploads', video.filename);
         }
       } catch (err) {
         console.log('Video not found in database, trying alternative methods...');
@@ -169,39 +165,81 @@ const videoAwareRewrite = async (req, res) => {
     }
 
     // If no video found by ID, try to use videoUrl
-    if (!videoFilePath && videoUrl) {
-      // videoUrl might be like "/uploads/video-123.mp4" - extract the filename
+    if (!mediaFilePath && videoUrl) {
+      // videoUrl might be like "/uploads/video-123.mp4" or "/uploads/slide-123.png"
       const urlPath = videoUrl.startsWith('/') ? videoUrl : `/${videoUrl}`;
       const filename = path.basename(urlPath);
-      videoFilePath = path.join(__dirname, '../uploads', filename);
+      mediaFilePath = path.join(__dirname, '../uploads', filename);
       
       // If that doesn't exist, try the full relative path
-      if (!fs.existsSync(videoFilePath)) {
-        videoFilePath = path.join(__dirname, '..', urlPath.replace(/^\//, ''));
+      if (!fs.existsSync(mediaFilePath)) {
+        mediaFilePath = path.join(__dirname, '..', urlPath.replace(/^\//, ''));
+      }
+      
+      // Determine media type from extension
+      const ext = path.extname(filename).toLowerCase();
+      if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
+        mediaType = 'image';
+      } else if (['.pdf'].includes(ext)) {
+        mediaType = 'pdf';
       }
     }
 
-    // Check if video file exists
-    if (!videoFilePath || !fs.existsSync(videoFilePath)) {
-      console.log(`❌ Video/document file not found. Attempted path: ${videoFilePath}`);
-      console.log(`VideoId: ${videoId}, VideoUrl: ${videoUrl}`);
+    // If still no file and we have projectId, try to get first slide from project
+    if ((!mediaFilePath || !fs.existsSync(mediaFilePath)) && (projectId || videoId)) {
+      try {
+        const Project = require('../models/Project');
+        const project = await Project.findById(projectId || videoId);
+        
+        if (project && project.slides && project.slides.length > 0) {
+          // Use first slide image for analysis
+          const firstSlide = project.slides[0];
+          const slideUrl = firstSlide.url;
+          const filename = path.basename(slideUrl);
+          mediaFilePath = path.join(__dirname, '../uploads', filename);
+          mediaType = 'image';
+          console.log(`📸 Using first slide for analysis: ${filename}`);
+        }
+      } catch (err) {
+        console.log('Project slides not found...');
+      }
+    }
+
+    // Check if media file exists
+    if (!mediaFilePath || !fs.existsSync(mediaFilePath)) {
+      console.log(`❌ Media file not found. Attempted path: ${mediaFilePath}`);
+      console.log(`VideoId: ${videoId}, VideoUrl: ${videoUrl}, ProjectId: ${projectId}`);
       
-      return res.status(404).json({
-        success: false,
-        error: 'No video or document file found. Please upload a video, DOCX, or PDF file first to use AI Rewrite with context.'
+      // Fallback: Generate script using text-only mode
+      console.log('📝 Falling back to text-based generation...');
+      const rewrittenText = await geminiService.generateTextOnlyScript(textToProcess);
+      
+      return res.status(200).json({
+        success: true,
+        data: {
+          rewrittenText: rewrittenText,
+          videoAnalyzed: false,
+          mode: 'text-only'
+        }
       });
     }
 
-    console.log(`🎬 Analyzing video for AI rewrite: ${videoFilePath}`);
+    console.log(`🎬 Analyzing ${mediaType} for AI rewrite: ${mediaFilePath}`);
 
-    // Use Gemini to analyze video and rewrite text
-    const rewrittenText = await geminiService.generateVideoAwareRewrite(videoFilePath, currentText);
+    // Use appropriate Gemini method based on media type
+    let rewrittenText;
+    if (mediaType === 'image') {
+      rewrittenText = await geminiService.generateImageAwareRewrite(mediaFilePath, textToProcess);
+    } else {
+      rewrittenText = await geminiService.generateVideoAwareRewrite(mediaFilePath, textToProcess);
+    }
 
     res.status(200).json({
       success: true,
       data: {
         rewrittenText: rewrittenText,
-        videoAnalyzed: true
+        videoAnalyzed: true,
+        mode: mediaType
       }
     });
 

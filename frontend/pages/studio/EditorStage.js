@@ -1,26 +1,22 @@
 // frontend/components/studio/EditorStage.js
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 
-export default function EditorStage({ videoUrl, activeText, isPlaying, currentTime }) {
+export default function EditorStage({ videoUrl, activeText, isPlaying, currentTime, onTimeUpdate, onVideoEnded, videoRef: externalVideoRef }) {
   // Position state for the text box (draggable)
   const [position, setPosition] = useState({ x: 10, y: 50 }); // % coordinates
-  const [isDragging, setIsDragging] = useState(false);
-  const videoRef = useRef(null);
+  const internalVideoRef = useRef(null);
+  
+  // Use external ref if provided, otherwise use internal
+  const videoRef = externalVideoRef || internalVideoRef;
 
-  // Sync video play/pause with parent state
-  useEffect(() => {
-    if (videoRef.current) {
-        if (isPlaying) videoRef.current.play();
-        else videoRef.current.pause();
+  // NOTE: Play/pause is handled by parent via videoRef - no useEffect needed here
+
+  // Handle video time updates - notify parent for UI sync
+  const handleTimeUpdate = () => {
+    if (videoRef.current && onTimeUpdate) {
+      onTimeUpdate(videoRef.current.currentTime);
     }
-  }, [isPlaying]);
-
-  // Sync video time
-  useEffect(() => {
-      if (videoRef.current && Math.abs(videoRef.current.currentTime - currentTime) > 0.5) {
-          videoRef.current.currentTime = currentTime;
-      }
-  }, [currentTime]);
+  };
 
   return (
     <div className="flex-1 bg-black flex items-center justify-center p-8 overflow-hidden">
@@ -32,7 +28,13 @@ export default function EditorStage({ videoUrl, activeText, isPlaying, currentTi
             ref={videoRef}
             src={videoUrl}
             className="absolute inset-0 w-full h-full object-contain"
-            muted // Muted because audio usually comes from the separate audio track/TTS
+            muted // Muted because audio comes from the separate TTS audio track
+            onTimeUpdate={handleTimeUpdate}
+            onEnded={() => {
+              console.log('🎬 Video ended');
+              if (onVideoEnded) onVideoEnded();
+            }}
+            playsInline
           />
 
           {/* 3. CLUESO OVERLAY LAYER */}

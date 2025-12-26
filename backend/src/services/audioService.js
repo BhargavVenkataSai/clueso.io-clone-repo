@@ -61,7 +61,39 @@ const ELEVENLABS_VOICES = {
 };
 
 // Map UI voice names to ElevenLabs voice IDs
+// Organized by country: 2 males + 2 females per country
 const VOICE_MAP = {
+    // 🇺🇸 American English
+    adam_us: ELEVENLABS_VOICES.adam,       // Deep male voice
+    josh_us: ELEVENLABS_VOICES.josh,       // Deep male voice
+    rachel_us: ELEVENLABS_VOICES.rachel,   // Calm female voice
+    emily_us: ELEVENLABS_VOICES.emily,     // Calm female voice
+    
+    // 🇬🇧 British English
+    joseph_uk: ELEVENLABS_VOICES.joseph,   // British male voice
+    harry_uk: ELEVENLABS_VOICES.harry,     // British male voice
+    charlotte_uk: ELEVENLABS_VOICES.charlotte, // British female voice
+    dorothy_uk: ELEVENLABS_VOICES.dorothy, // British female voice
+    
+    // 🇨🇦 Canadian English
+    liam_ca: ELEVENLABS_VOICES.liam,       // Articulate male voice
+    ethan_ca: ELEVENLABS_VOICES.ethan,     // Narrator male voice
+    sarah_ca: ELEVENLABS_VOICES.sarah,     // Calm female voice
+    matilda_ca: ELEVENLABS_VOICES.matilda, // Warm female voice
+    
+    // 🇮🇳 Indian English
+    amrit_in: ELEVENLABS_VOICES.antoni,    // Well-rounded male voice
+    raj_in: ELEVENLABS_VOICES.paul,        // News anchor male voice
+    priya_in: ELEVENLABS_VOICES.domi,      // Confident female voice
+    ananya_in: ELEVENLABS_VOICES.elli,     // Emotional female voice
+    
+    // 🇦🇺 Australian English
+    charlie_au: ELEVENLABS_VOICES.charlie, // Casual male voice
+    callum_au: ELEVENLABS_VOICES.callum,   // Intense male voice
+    freya_au: ELEVENLABS_VOICES.freya,     // Expressive female voice
+    grace_au: ELEVENLABS_VOICES.grace,     // Southern female voice
+    
+    // Legacy mappings for backward compatibility
     amrit: ELEVENLABS_VOICES.adam,
     matt: ELEVENLABS_VOICES.matthew,
     james: ELEVENLABS_VOICES.james,
@@ -72,6 +104,7 @@ const VOICE_MAP = {
     jessica: ELEVENLABS_VOICES.charlotte,
     sarah: ELEVENLABS_VOICES.sarah,
     emily: ELEVENLABS_VOICES.emily,
+    
     // Direct ElevenLabs voice names
     rachel: ELEVENLABS_VOICES.rachel,
     charlotte: ELEVENLABS_VOICES.charlotte,
@@ -82,6 +115,13 @@ const VOICE_MAP = {
 
 // Fallback to Google TTS language mapping
 const GOOGLE_TTS_LANG_MAP = {
+    // New country-based voices
+    adam_us: 'en-US', josh_us: 'en-US', rachel_us: 'en-US', emily_us: 'en-US',
+    joseph_uk: 'en-GB', harry_uk: 'en-GB', charlotte_uk: 'en-GB', dorothy_uk: 'en-GB',
+    liam_ca: 'en-CA', ethan_ca: 'en-CA', sarah_ca: 'en-CA', matilda_ca: 'en-CA',
+    amrit_in: 'en-IN', raj_in: 'en-IN', priya_in: 'en-IN', ananya_in: 'en-IN',
+    charlie_au: 'en-AU', callum_au: 'en-AU', freya_au: 'en-AU', grace_au: 'en-AU',
+    // Legacy mappings
     amrit: 'en', matt: 'en', james: 'en', michael: 'en',
     david: 'en', sammy: 'en', natasha: 'en', jessica: 'en',
     sarah: 'en', emily: 'en'

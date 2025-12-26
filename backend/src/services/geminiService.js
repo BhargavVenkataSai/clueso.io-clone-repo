@@ -7,10 +7,29 @@ const path = require('path');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "STUB_KEY");
 const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY || "STUB_KEY");
 
-// Model Constants
-const MODEL_FLASH = 'gemini-2.5-flash';
-const MODEL_FLASH_LITE = 'gemini-2.5-flash-lite';
-const MODEL_VIDEO = 'gemini-1.5-flash'; // Optimized for video multimodal tasks
+// Model Constants - using Gemini 2.5 Flash family with fallback chain
+const MODEL_FLASH = 'gemini-2.5-flash';           // Primary model - best performance
+const MODEL_FLASH_LITE = 'gemini-2.5-flash-lite'; // Lite version - faster, lower cost
+const MODEL_VIDEO = 'gemini-2.0-flash';           // For video/multimodal - 2.0 has better video support
+const MODEL_FALLBACK = 'gemini-2.0-flash';        // Fallback if 2.5 quota exceeded
+
+// Helper to try multiple models
+const tryWithFallback = async (primaryModel, fallbackModel, generateFn) => {
+    try {
+        return await generateFn(primaryModel);
+    } catch (error) {
+        if (error.status === 429 || error.message?.includes('quota') || error.message?.includes('429')) {
+            console.log(`⚠️ Primary model quota exceeded, trying fallback model: ${fallbackModel}`);
+            try {
+                return await generateFn(fallbackModel);
+            } catch (fallbackError) {
+                console.error(`❌ Fallback model also failed:`, fallbackError.message);
+                throw fallbackError;
+            }
+        }
+        throw error;
+    }
+};
 
 /**
  * Cleans and polishes the raw transcript segments into a cohesive script.
@@ -124,95 +143,187 @@ const generateArticle = async (steps) => {
 };
 
 /**
- * Uploads a video file to Google GenAI for analysis
+ * Uploads a video file to Google GenAI for analysis with retry logic
  * @param {string} filePath - Path to the video file on disk
+ * @param {number} maxRetries - Maximum retry attempts (default: 3)
  * @returns {Promise<string>} File URI for use in Gemini API
  */
-const uploadVideoToGemini = async (filePath) => {
-    try {
-        console.log("📤 Uploading video to Google File Manager...");
-        
-        const uploadResult = await fileManager.uploadFile(filePath, {
-            mimeType: "video/mp4", // Adjust if you support other formats
-            displayName: "User Recording",
-        });
-        
-        console.log(`✅ Upload complete: ${uploadResult.file.name}`);
-        console.log(`⏳ Waiting for processing (initial state: ${uploadResult.file.state})...`);
-        
-        let file = await fileManager.getFile(uploadResult.file.name);
-        let attempts = 0;
-        const maxAttempts = 60; // 2 minutes max
-        
-        // Wait for processing to complete
-        while (file.state === "PROCESSING" && attempts < maxAttempts) {
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-            file = await fileManager.getFile(uploadResult.file.name);
-            attempts++;
+const uploadVideoToGemini = async (filePath, maxRetries = 3) => {
+    // Check if file exists and get size
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`Video file not found: ${filePath}`);
+    }
+    
+    const stats = fs.statSync(filePath);
+    const fileSizeMB = stats.size / (1024 * 1024);
+    console.log(`📁 Video file size: ${fileSizeMB.toFixed(2)} MB`);
+    
+    // Warn if file is large (>50MB may have issues)
+    if (fileSizeMB > 100) {
+        console.warn(`⚠️ Large file detected (${fileSizeMB.toFixed(0)}MB). Upload may take longer or fail.`);
+    }
+    
+    let lastError = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            console.log(`📤 Uploading video to Google File Manager... (attempt ${attempt}/${maxRetries})`);
             
-            if (attempts % 5 === 0) {
-                console.log(`⏳ Still processing... (${attempts * 2}s elapsed)`);
+            const uploadResult = await fileManager.uploadFile(filePath, {
+                mimeType: "video/mp4", // Adjust if you support other formats
+                displayName: "User Recording",
+            });
+            
+            console.log(`✅ Upload complete: ${uploadResult.file.name}`);
+            console.log(`⏳ Waiting for processing (initial state: ${uploadResult.file.state})...`);
+            
+            let file = await fileManager.getFile(uploadResult.file.name);
+            let pollAttempts = 0;
+            const maxPollAttempts = 60; // 2 minutes max
+            
+            // Wait for processing to complete
+            while (file.state === "PROCESSING" && pollAttempts < maxPollAttempts) {
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                file = await fileManager.getFile(uploadResult.file.name);
+                pollAttempts++;
+                
+                if (pollAttempts % 5 === 0) {
+                    console.log(`⏳ Still processing... (${pollAttempts * 2}s elapsed)`);
+                }
+            }
+            
+            if (file.state === "FAILED") {
+                throw new Error("Video processing failed by Gemini.");
+            }
+            
+            if (file.state === "PROCESSING") {
+                throw new Error("Video processing timeout - file may be too large");
+            }
+            
+            console.log(`✅ Video ready for analysis: ${file.uri}`);
+            return file.uri;
+            
+        } catch (error) {
+            lastError = error;
+            console.error(`❌ Upload attempt ${attempt} failed:`, error.message);
+            
+            // Don't retry on certain errors
+            if (error.message?.includes('not found') || 
+                error.message?.includes('Invalid API key') ||
+                error.message?.includes('quota')) {
+                throw error;
+            }
+            
+            if (attempt < maxRetries) {
+                const delay = attempt * 2000; // Exponential backoff: 2s, 4s, 6s
+                console.log(`⏳ Retrying in ${delay/1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
-        
-        if (file.state === "FAILED") {
-            throw new Error("Video processing failed by Gemini.");
-        }
-        
-        if (file.state === "PROCESSING") {
-            throw new Error("Video processing timeout - file may be too large");
-        }
-        
-        console.log(`✅ Video ready for analysis: ${file.uri}`);
-        return file.uri;
-    } catch (error) {
-        console.error("❌ Gemini Upload Error:", error);
-        throw error;
     }
+    
+    console.error("❌ All upload attempts failed");
+    throw lastError;
 };
 
 /**
  * Rewrites script based on Visual Video Context + Current Text
+ * If no text is provided, generates a new script from video analysis
  * @param {string} videoFilePath - Path to video file
- * @param {string} currentText - Current script text
- * @returns {Promise<string>} Rewritten script based on visual context
+ * @param {string} currentText - Current script text (optional - can be empty)
+ * @returns {Promise<string>} Rewritten or generated script based on visual context
  */
 const generateVideoAwareRewrite = async (videoFilePath, currentText) => {
-    const model = genAI.getGenerativeModel({ model: MODEL_VIDEO });
-    
-    try {
+    const generateWithModel = async (modelName) => {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        
         // 1. Upload Video
         const fileUri = await uploadVideoToGemini(videoFilePath);
         
-        // 2. Prompt with Video AND Text
-        const prompt = `
-        You are an expert video editor and copywriter.
-        I will provide a video and a draft script segment.
+        // 2. Choose prompt based on whether we have existing text
+        let prompt;
         
-        Task:
-        Watch the video segment provided.
-        Rewrite the "Draft Script" to perfectly match the actions occurring on screen.
-        - If the user clicks a button, mention it.
-        - If the screen changes, reflect that in the narration.
-        - Make it professional, concise, and engaging.
-        - Keep the tone conversational.
-        
-        Draft Script: "${currentText}"
-        `;
+        if (currentText && currentText.trim()) {
+            // Rewrite mode - improve existing text based on video
+            prompt = `
+            You are an expert video editor and copywriter.
+            I will provide a video and a draft script segment.
+            
+            Task:
+            Watch the video segment provided.
+            Rewrite the "Draft Script" to perfectly match the actions occurring on screen.
+            - If the user clicks a button, mention it.
+            - If the screen changes, reflect that in the narration.
+            - Make it professional, concise, and engaging.
+            - Keep the tone conversational.
+            
+            Draft Script: "${currentText}"
+            `;
+        } else {
+            // Generate mode - create new script from video analysis
+            prompt = `
+            You are an expert video editor and copywriter.
+            I will provide a video of a screen recording or product demo.
+            
+            Task:
+            Watch the video carefully and generate a professional voiceover script.
+            - Describe all the actions happening on screen step by step.
+            - If the user clicks a button, mention it clearly.
+            - If the screen changes or navigates, describe what's happening.
+            - Make the script professional, concise, and engaging.
+            - Keep the tone conversational and easy to follow.
+            - Focus on what the viewer needs to know to understand the demonstration.
+            
+            Generate a complete narration script for this video:
+            `;
+        }
 
-        console.log("🤖 Generating video-aware rewrite...");
+        console.log(`🤖 Generating video-aware ${currentText?.trim() ? "rewrite" : "script"} with model: ${modelName}...`);
         const result = await model.generateContent([
             { fileData: { mimeType: "video/mp4", fileUri: fileUri } },
             { text: prompt },
         ]);
         
         const rewrittenText = result.response.text();
-        console.log("✅ Video-aware rewrite complete!");
+        console.log("✅ Video-aware " + (currentText?.trim() ? "rewrite" : "generation") + " complete!");
         return rewrittenText;
+    };
+
+    try {
+        // Try primary model first, then fallback
+        return await tryWithFallback(MODEL_VIDEO, MODEL_FALLBACK, generateWithModel);
     } catch (error) {
         console.error("❌ Gemini Rewrite Error:", error);
-        console.log("⚠️  Falling back to original text");
-        return currentText; // Fallback
+        
+        // Check for rate limit error
+        if (error.status === 429 || error.message?.includes('quota')) {
+            const retryMatch = error.message?.match(/retry in ([\d.]+)s/i);
+            const retryTime = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 60;
+            console.log(`⏳ Rate limited. Quota exceeded - please wait ${retryTime} seconds or check your Gemini API billing.`);
+            throw new Error(`API rate limit exceeded. Please wait ${retryTime} seconds and try again, or upgrade your Gemini API plan.`);
+        }
+        
+        // Check for network/fetch errors - try text-only generation as fallback
+        if (error.message?.includes('fetch failed') || error.message?.includes('ECONNREFUSED') || error.message?.includes('network')) {
+            console.log("⚠️ Video upload failed due to network issues. Trying text-only generation...");
+            
+            try {
+                // Fall back to text-only generation
+                const model = genAI.getGenerativeModel({ model: MODEL_FALLBACK });
+                const fallbackPrompt = currentText?.trim()
+                    ? `Improve and polish this script text professionally:\n\n"${currentText}"\n\nReturn only the improved text.`
+                    : `Generate a brief, professional voiceover script placeholder. The script should be about explaining a software feature or tutorial. Keep it under 50 words.`;
+                    
+                const result = await model.generateContent(fallbackPrompt);
+                console.log("✅ Text-only fallback generation complete");
+                return result.response.text();
+            } catch (fallbackErr) {
+                console.error("❌ Text-only fallback also failed:", fallbackErr.message);
+            }
+        }
+        
+        console.log("⚠️  Falling back to original text or placeholder");
+        return currentText || "Script generation failed. Please try again or write your script manually.";
     }
 };
 
@@ -458,6 +569,135 @@ const generateScriptFromDocument = async (text) => {
   }
 };
 
+/**
+ * Generates/Rewrites script based on Image Analysis
+ * @param {string} imagePath - Path to image file
+ * @param {string} currentText - Current script text (optional)
+ * @returns {Promise<string>} Generated or rewritten script
+ */
+const generateImageAwareRewrite = async (imagePath, currentText) => {
+    const generateWithModel = async (modelName) => {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        
+        // Read image file
+        const imageData = fs.readFileSync(imagePath);
+        const base64Image = imageData.toString('base64');
+        const ext = path.extname(imagePath).toLowerCase();
+        const mimeType = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
+        
+        let prompt;
+        
+        if (currentText && currentText.trim()) {
+            prompt = `
+            You are an expert copywriter and presentation designer.
+            I will provide an image (a slide or screenshot) and a draft script.
+            
+            Task:
+            Analyze the image and rewrite the draft script to accurately describe what's shown.
+            - Describe key visual elements, text, and UI components visible.
+            - Make it professional, concise, and engaging.
+            - Keep the tone conversational.
+            
+            Draft Script: "${currentText}"
+            
+            Return ONLY the rewritten script text.
+            `;
+        } else {
+            prompt = `
+            You are an expert copywriter and presentation designer.
+            I will provide an image (a slide or screenshot).
+            
+            Task:
+            Analyze the image and generate a professional voiceover script for it.
+            - Describe what's shown in the image clearly and engagingly.
+            - If it's a UI screenshot, explain the interface and key elements.
+            - If it's a presentation slide, narrate the key points.
+            - Make it professional, concise, and easy to follow.
+            - Keep the tone conversational.
+            
+            Generate a narration script for this image:
+            `;
+        }
+
+        console.log(`🤖 Generating image-aware ${currentText?.trim() ? "rewrite" : "script"} with model: ${modelName}...`);
+        
+        const result = await model.generateContent([
+            {
+                inlineData: {
+                    mimeType: mimeType,
+                    data: base64Image
+                }
+            },
+            { text: prompt }
+        ]);
+        
+        const rewrittenText = result.response.text();
+        console.log("✅ Image-aware " + (currentText?.trim() ? "rewrite" : "generation") + " complete!");
+        return rewrittenText;
+    };
+    
+    try {
+        return await tryWithFallback(MODEL_FLASH, MODEL_FALLBACK, generateWithModel);
+    } catch (error) {
+        console.error("❌ Gemini Image Analysis Error:", error);
+        return currentText || "Script generation failed. Please try again or write your script manually.";
+    }
+};
+
+/**
+ * Generates script using text-only mode (no media)
+ * @param {string} currentText - Current script text or context
+ * @returns {Promise<string>} Generated or improved script
+ */
+const generateTextOnlyScript = async (currentText) => {
+    const generateWithModel = async (modelName) => {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        
+        let prompt;
+        
+        if (currentText && currentText.trim()) {
+            prompt = `
+            You are an expert copywriter and script editor.
+            
+            Task:
+            Improve the following draft script to be more professional and engaging.
+            - Fix grammar and sentence structure.
+            - Make it sound natural and conversational.
+            - Keep the same meaning but improve clarity.
+            
+            Draft Script: "${currentText}"
+            
+            Return ONLY the improved script text.
+            `;
+        } else {
+            prompt = `
+            You are an expert copywriter.
+            
+            Task:
+            Generate a short, professional placeholder script for a video presentation.
+            The script should be a generic introduction that can be customized.
+            
+            Example topics: product demo, tutorial walkthrough, feature explanation.
+            
+            Return ONLY the script text (2-3 sentences).
+            `;
+        }
+
+        console.log(`🤖 Generating text-only script with model: ${modelName}...`);
+        const result = await model.generateContent(prompt);
+        const generatedText = result.response.text();
+        console.log("✅ Text-only generation complete!");
+        return generatedText;
+    };
+    
+    try {
+        return await tryWithFallback(MODEL_FLASH_LITE, MODEL_FALLBACK, generateWithModel);
+    } catch (error) {
+        console.error("❌ Gemini Text Generation Error:", error);
+        return currentText || "Welcome to this presentation. Let's explore the key features and capabilities.";
+    }
+};
+
 module.exports = {
     cleanScript,
     generateSteps,
@@ -466,6 +706,8 @@ module.exports = {
     processVideoRecording,
     uploadVideoToGemini,
     generateVideoAwareRewrite,
+    generateImageAwareRewrite,
+    generateTextOnlyScript,
     generateSlideScript,
     generateImageScript,
     generateScriptFromDocument

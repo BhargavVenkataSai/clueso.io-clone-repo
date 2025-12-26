@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -22,8 +22,22 @@ export default function VideoEditor() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(50);
 
+  // Timeline clips state - draggable positions
+  const [videoClipStart, setVideoClipStart] = useState(0); // Start position in pixels
+  const [audioClipStart, setAudioClipStart] = useState(0);
+  const [draggingClip, setDraggingClip] = useState(null); // 'video' | 'audio' | null
+  const [playheadPosition, setPlayheadPosition] = useState(50); // Playhead position in pixels
+  const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
+  const timelineRef = useRef(null);
+
   // NEW STATE for Text Sync with EditorStage
   const [previewText, setPreviewText] = useState("Let's dive in.");
+  
+  // Audio sync state - for synchronized video + voice playback
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [audioSlides, setAudioSlides] = useState([]); // Store slides with timing info
+  const audioRef = useRef(null);
+  const videoRef = useRef(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -36,6 +50,261 @@ export default function VideoEditor() {
       loadVideo();
     }
   }, [id, user]);
+
+  // Track play promises to avoid AbortError
+  const videoPlayPromise = useRef(null);
+  const audioPlayPromise = useRef(null);
+  const syncIntervalRef = useRef(null);
+  const isTogglingRef = useRef(false); // Debounce rapid clicks
+  const isSeekingRef = useRef(false); // Prevent sync during seek
+
+  // Sync audio to video continuously during playback
+  const startSyncInterval = useCallback(() => {
+    // Clear any existing interval
+    if (syncIntervalRef.current) {
+      clearInterval(syncIntervalRef.current);
+    }
+    
+    // Sync audio to video every 100ms
+    syncIntervalRef.current = setInterval(() => {
+      // Don't sync during seek operations
+      if (isSeekingRef.current) return;
+      
+      if (videoRef.current && audioRef.current && audioUrl) {
+        const videoCurrent = videoRef.current.currentTime;
+        const audioCurrent = audioRef.current.currentTime;
+        const drift = Math.abs(videoCurrent - audioCurrent);
+        
+        // If drift is more than 0.15s, resync
+        if (drift > 0.15) {
+          audioRef.current.currentTime = videoCurrent;
+        }
+      }
+    }, 100);
+  }, [audioUrl]);
+
+  const stopSyncInterval = useCallback(() => {
+    if (syncIntervalRef.current) {
+      clearInterval(syncIntervalRef.current);
+      syncIntervalRef.current = null;
+    }
+  }, []);
+
+  // Cleanup sync interval on unmount
+  useEffect(() => {
+    return () => stopSyncInterval();
+  }, [stopSyncInterval]);
+
+  // Handle synchronized play/pause with debounce
+  const handlePlayPause = useCallback(async () => {
+    // Prevent rapid clicking
+    if (isTogglingRef.current) return;
+    isTogglingRef.current = true;
+    
+    const newIsPlaying = !isPlaying;
+    setIsPlaying(newIsPlaying);
+    
+    if (newIsPlaying) {
+      // Sync audio time to video time before playing
+      if (videoRef.current && audioRef.current && audioUrl) {
+        audioRef.current.currentTime = videoRef.current.currentTime;
+      }
+      
+      // Play both video and audio simultaneously - only if not already playing
+      try {
+        const playPromises = [];
+        
+        if (videoRef.current && videoRef.current.paused) {
+          videoPlayPromise.current = videoRef.current.play();
+          playPromises.push(videoPlayPromise.current);
+        }
+        
+        if (audioRef.current && audioUrl && audioRef.current.paused) {
+          audioPlayPromise.current = audioRef.current.play();
+          playPromises.push(audioPlayPromise.current);
+        }
+        
+        if (playPromises.length > 0) {
+          await Promise.allSettled(playPromises);
+        }
+        startSyncInterval();
+      } catch (e) {
+        // Ignore AbortError
+      }
+      
+    } else {
+      // Stop sync interval first
+      stopSyncInterval();
+      
+      // Wait for play promises to settle before pausing
+      await Promise.allSettled([
+        videoPlayPromise.current,
+        audioPlayPromise.current
+      ].filter(Boolean));
+      
+      // Now safe to pause both - only if not already paused
+      if (videoRef.current && !videoRef.current.paused) videoRef.current.pause();
+      if (audioRef.current && !audioRef.current.paused) audioRef.current.pause();
+    }
+    
+    // Allow toggling again after a short delay
+    setTimeout(() => {
+      isTogglingRef.current = false;
+    }, 100);
+  }, [isPlaying, audioUrl, startSyncInterval, stopSyncInterval]);
+
+  // Handle time update from video - update UI time display
+  const handleTimeUpdate = useCallback((time) => {
+    setCurrentTime(time);
+  }, []);
+
+  // Handle seeking - sync audio when video is seeked
+  const handleSeek = useCallback(async (newTime) => {
+    // Mark that we're seeking to prevent sync interference
+    isSeekingRef.current = true;
+    
+    // If currently playing, pause first to avoid AbortError during seek
+    const wasPlaying = isPlaying && videoRef.current && !videoRef.current.paused;
+    
+    if (wasPlaying) {
+      // Pause both before seeking
+      try {
+        await Promise.allSettled([videoPlayPromise.current, audioPlayPromise.current].filter(Boolean));
+      } catch (e) {}
+      if (videoRef.current) videoRef.current.pause();
+      if (audioRef.current) audioRef.current.pause();
+    }
+    
+    // Now seek
+    if (videoRef.current) {
+      videoRef.current.currentTime = newTime;
+    }
+    if (audioRef.current && audioUrl) {
+      audioRef.current.currentTime = newTime;
+    }
+    setCurrentTime(newTime);
+    
+    // Resume if was playing
+    if (wasPlaying) {
+      try {
+        const playPromises = [];
+        if (videoRef.current) {
+          videoPlayPromise.current = videoRef.current.play();
+          playPromises.push(videoPlayPromise.current);
+        }
+        if (audioRef.current && audioUrl) {
+          audioPlayPromise.current = audioRef.current.play();
+          playPromises.push(audioPlayPromise.current);
+        }
+        await Promise.allSettled(playPromises);
+      } catch (e) {}
+    }
+    
+    // Done seeking
+    isSeekingRef.current = false;
+  }, [audioUrl, isPlaying]);
+
+  // Handle audio URL update from ScriptPanel
+  const handleAudioReady = useCallback((url, slides) => {
+    console.log('🔊 Audio ready for sync:', url);
+    setAudioUrl(url);
+    if (slides) setAudioSlides(slides);
+    
+    // Reset playback position when new audio is loaded
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+    }
+    setCurrentTime(0);
+    setIsPlaying(false);
+  }, []);
+
+  // Timeline clip drag handlers - using refs to avoid stale closure issues
+  const handleClipDragStart = (e, clipType) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const startX = e.clientX;
+    const startPos = clipType === 'video' ? videoClipStart : audioClipStart;
+    
+    const handleMouseMove = (moveEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const newPos = Math.max(0, startPos + deltaX);
+      const maxPos = 600; // Max drag distance
+      const clampedPos = Math.min(newPos, maxPos);
+      
+      if (clipType === 'video') {
+        setVideoClipStart(clampedPos);
+      } else {
+        setAudioClipStart(clampedPos);
+      }
+    };
+    
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      setDraggingClip(null);
+    };
+    
+    setDraggingClip(clipType);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Playhead drag handler - for scrubbing through timeline
+  const handlePlayheadDragStart = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('🎯 Playhead drag started');
+    
+    const startX = e.clientX;
+    const startPos = playheadPosition;
+    
+    setIsDraggingPlayhead(true);
+    
+    const handleMouseMove = (moveEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const newPos = Math.max(16, startPos + deltaX); // Min 16px from left (padding)
+      const maxPos = 800; // Max position
+      const clampedPos = Math.min(newPos, maxPos);
+      
+      console.log('🎯 Playhead moving to:', clampedPos);
+      setPlayheadPosition(clampedPos);
+      
+      // Convert pixel position to time and seek video/audio
+      const pixelsPerSecond = 64; // Approximate: each second = 64px
+      const timeInSeconds = (clampedPos - 16) / pixelsPerSecond;
+      handleSeek(Math.max(0, timeInSeconds));
+    };
+    
+    const handleMouseUp = () => {
+      console.log('🎯 Playhead drag ended');
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      setIsDraggingPlayhead(false);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Click on timeline to move playhead
+  const handleTimelineClick = (e) => {
+    if (draggingClip || isDraggingPlayhead) return;
+    
+    const timelineRect = timelineRef.current?.getBoundingClientRect();
+    if (!timelineRect) return;
+    
+    const clickX = e.clientX - timelineRect.left + (timelineRef.current?.scrollLeft || 0);
+    const newPos = Math.max(16, clickX);
+    
+    setPlayheadPosition(newPos);
+    
+    // Convert to time
+    const pixelsPerSecond = 64;
+    const timeInSeconds = (newPos - 16) / pixelsPerSecond;
+    handleSeek(Math.max(0, timeInSeconds));
+  };
 
   const loadVideo = async () => {
     try {
@@ -126,7 +395,10 @@ export default function VideoEditor() {
                         <ScriptPanel 
                             projectId={id} 
                             videoId={id}
+                            currentTime={currentTime}
+                            isPlaying={isPlaying}
                             onActiveTextChange={(text) => setPreviewText(text)}
+                            onAudioReady={handleAudioReady}
                         />
                     )}
                     {activeTab !== 'script' && (
@@ -158,12 +430,32 @@ export default function VideoEditor() {
                     </button>
                  </div>
 
+                {/* Hidden Audio Element for TTS Voice - always rendered to avoid recreation */}
+                <audio 
+                  ref={audioRef}
+                  src={audioUrl || ''} 
+                  preload="auto"
+                  onEnded={() => {
+                    // Audio ended but don't stop video - let video continue playing
+                    // Only stop everything when VIDEO ends, not audio
+                    console.log('🔊 Audio track ended');
+                  }}
+                  style={{ display: 'none' }}
+                />
+
                 {/* Video Preview Canvas - REPLACED WITH EditorStage */}
                 <EditorStage 
                     videoUrl={video?.files?.original?.path || video?.filename ? `/uploads/${video.filename}` : ""}
                     activeText={previewText}
                     isPlaying={isPlaying}
                     currentTime={currentTime}
+                    onTimeUpdate={handleTimeUpdate}
+                    onVideoEnded={() => {
+                      console.log('🎬 Video playback finished');
+                      setIsPlaying(false);
+                      stopSyncInterval();
+                    }}
+                    videoRef={videoRef}
                 />
 
                 {/* Timeline Area (Bottom) */}
@@ -187,7 +479,7 @@ export default function VideoEditor() {
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                              </button>
                              <button 
-                                onClick={() => setIsPlaying(!isPlaying)}
+                                onClick={handlePlayPause}
                                 className="p-2 rounded-full bg-pink-600 text-white hover:bg-pink-500 shadow-lg"
                              >
                                 {isPlaying ? (
@@ -216,41 +508,115 @@ export default function VideoEditor() {
                     </div>
 
                     {/* Timeline Tracks */}
-                    <div className="flex-1 overflow-x-auto relative custom-scrollbar">
+                    <div 
+                        ref={timelineRef} 
+                        className="flex-1 overflow-x-auto relative custom-scrollbar"
+                        onClick={handleTimelineClick}
+                    >
                         {/* Time Ruler */}
                         <div className="h-6 border-b border-gray-800 flex items-end px-4 text-[10px] text-gray-500 select-none">
                             <span className="mr-16">1s</span>
                             <span className="mr-16">2s</span>
                             <span className="mr-16">3s</span>
                             <span className="mr-16">4s</span>
-                            <div className="absolute top-0 bottom-0 left-[50px] w-px bg-pink-500 z-10">
-                                <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-pink-500 rotate-45 transform"></div>
+                            <span className="mr-16">5s</span>
+                            <span className="mr-16">6s</span>
+                            <span className="mr-16">7s</span>
+                            <span className="mr-16">8s</span>
+                        </div>
+                        
+                        {/* Draggable Playhead / Time Indicator */}
+                        <div 
+                            className="absolute top-0 bottom-0 z-20"
+                            style={{ left: `${playheadPosition}px` }}
+                        >
+                            {/* Wider invisible hit area for easier grabbing */}
+                            <div 
+                                className="absolute top-0 bottom-0 -left-3 w-6 cursor-ew-resize"
+                                onMouseDown={handlePlayheadDragStart}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                            
+                            {/* Visible playhead line */}
+                            <div className={`absolute top-0 bottom-0 left-0 w-0.5 ${isDraggingPlayhead ? 'bg-pink-400' : 'bg-pink-500'}`} />
+                            
+                            {/* Playhead Handle (top) - larger and more visible */}
+                            <div 
+                                className={`absolute -top-1 -left-2 w-5 h-5 bg-pink-500 rounded cursor-grab active:cursor-grabbing ${isDraggingPlayhead ? 'bg-pink-400 scale-110' : 'hover:bg-pink-400 hover:scale-105'} transition-all shadow-lg flex items-center justify-center`}
+                                onMouseDown={handlePlayheadDragStart}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="w-1 h-3 bg-white/50 rounded-full" />
                             </div>
                         </div>
 
                         {/* Tracks */}
-                        <div className="p-4 space-y-2">
+                        <div className="p-4 space-y-2 min-w-[800px]">
                              {/* Video Track */}
-                             <div className="h-16 bg-gray-800/50 rounded-lg relative overflow-hidden border border-gray-700/50 group">
+                             <div className="h-16 bg-gray-800/50 rounded-lg relative overflow-visible border border-gray-700/50 group">
                                  {/* Striped Pattern Background */}
-                                 <div className="absolute inset-0 opacity-10" 
+                                 <div className="absolute inset-0 opacity-10 rounded-lg" 
                                     style={{backgroundImage: 'repeating-linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000), repeating-linear-gradient(45deg, #000 25%, #222 25%, #222 75%, #000 75%, #000)', backgroundPosition: '0 0, 10px 10px', backgroundSize: '20px 20px'}}>
                                  </div>
                                  
-                                 {/* Clip */}
-                                 <div className="absolute left-0 top-0 bottom-0 w-64 bg-gray-700 rounded-l-lg border-r border-gray-600 flex items-center px-4">
-                                     <div className="bg-black/30 px-2 py-0.5 rounded text-[10px] font-mono text-gray-300">
-                                         1 Slide
+                                 {/* Draggable Video Clip */}
+                                 <div 
+                                     className={`absolute top-0 bottom-0 w-64 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg border-2 ${draggingClip === 'video' ? 'border-white shadow-lg shadow-blue-500/50' : 'border-blue-500/50'} flex items-center px-3 cursor-grab active:cursor-grabbing select-none transition-shadow`}
+                                     style={{ left: `${videoClipStart}px` }}
+                                     onMouseDown={(e) => handleClipDragStart(e, 'video')}
+                                 >
+                                     {/* Drag Handle Left */}
+                                     <div className="absolute left-0 top-0 bottom-0 w-2 bg-blue-400/50 rounded-l-lg hover:bg-blue-400 cursor-ew-resize" />
+                                     
+                                     {/* Clip Content */}
+                                     <div className="flex items-center gap-2 ml-3">
+                                         <svg className="w-4 h-4 text-blue-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                         </svg>
+                                         <span className="text-xs font-medium text-white">Video Clip</span>
                                      </div>
+                                     
+                                     {/* Duration Badge */}
+                                     <div className="ml-auto bg-black/30 px-2 py-0.5 rounded text-[10px] font-mono text-blue-200">
+                                         0:30
+                                     </div>
+                                     
+                                     {/* Drag Handle Right */}
+                                     <div className="absolute right-0 top-0 bottom-0 w-2 bg-blue-400/50 rounded-r-lg hover:bg-blue-400 cursor-ew-resize" />
                                  </div>
                              </div>
 
                              {/* Audio Track */}
-                             <div className="h-12 bg-purple-900/20 rounded-lg relative overflow-hidden border border-purple-500/30">
-                                  <div className="absolute left-0 top-0 bottom-0 w-64 bg-purple-900/40 rounded-l-lg flex items-center justify-center">
-                                      <svg className="w-full h-8 text-purple-500 opacity-50" viewBox="0 0 100 20" preserveAspectRatio="none">
-                                          <path d="M0,10 Q10,20 20,10 T40,10 T60,10 T80,10 T100,10" fill="none" stroke="currentColor" strokeWidth="1" />
+                             <div className="h-12 bg-purple-900/20 rounded-lg relative overflow-visible border border-purple-500/30">
+                                  {/* Draggable Audio Clip */}
+                                  <div 
+                                      className={`absolute top-0 bottom-0 w-64 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg border-2 ${draggingClip === 'audio' ? 'border-white shadow-lg shadow-purple-500/50' : 'border-purple-500/50'} flex items-center px-3 cursor-grab active:cursor-grabbing select-none transition-shadow`}
+                                      style={{ left: `${audioClipStart}px` }}
+                                      onMouseDown={(e) => handleClipDragStart(e, 'audio')}
+                                  >
+                                      {/* Drag Handle Left */}
+                                      <div className="absolute left-0 top-0 bottom-0 w-2 bg-purple-400/50 rounded-l-lg hover:bg-purple-400 cursor-ew-resize" />
+                                      
+                                      {/* Waveform Visual */}
+                                      <svg className="absolute inset-0 w-full h-full text-white/20 pointer-events-none" viewBox="0 0 200 40" preserveAspectRatio="none">
+                                          <path d="M0,20 Q10,5 20,20 T40,20 T60,20 T80,20 T100,20 T120,20 T140,20 T160,20 T180,20 T200,20" fill="none" stroke="currentColor" strokeWidth="2" />
                                       </svg>
+                                      
+                                      {/* Clip Content */}
+                                      <div className="flex items-center gap-2 ml-3 relative z-10">
+                                          <svg className="w-4 h-4 text-purple-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                          </svg>
+                                          <span className="text-xs font-medium text-white">Voice</span>
+                                      </div>
+                                      
+                                      {/* Duration Badge */}
+                                      <div className="ml-auto bg-black/30 px-2 py-0.5 rounded text-[10px] font-mono text-purple-200 relative z-10">
+                                          0:15
+                                      </div>
+                                      
+                                      {/* Drag Handle Right */}
+                                      <div className="absolute right-0 top-0 bottom-0 w-2 bg-purple-400/50 rounded-r-lg hover:bg-purple-400 cursor-ew-resize" />
                                   </div>
                              </div>
                         </div>

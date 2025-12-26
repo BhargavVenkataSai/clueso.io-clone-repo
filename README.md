@@ -119,6 +119,23 @@ See the full demo video: [Link to be added]
 - Video metadata management
 - AI processing pipeline (mocked)
 
+**Projects (Document-to-Video)**
+- Convert PDFs/DOCX to video presentations
+- AI-generated scripts per slide
+- Automatic slide extraction from PDFs
+- Interactive slide editor
+
+**Feedback System**
+- Collect user feedback via public links
+- AI Sentiment analysis
+- Project-based feedback organization
+- Public API keys for widget integration
+
+**Knowledge Base (RAG)**
+- Upload documents for AI context
+- Retrieval-Augmented Generation for accurate scripts
+- Support for PDF and TXT files
+
 **AI Features**
 - **Gemini 2.5 Flash Integration**: Real-time generation of polished scripts, zoom plans, and step-by-step documentation.
 - **Studio Interface**: Advanced video editor UI with timeline, script editing, and preview.
@@ -135,6 +152,12 @@ See the full demo video: [Link to be added]
 - Screenshot management
 - Multi-format export
 - Translation support
+
+**UI/UX**
+- **Modern Landing Page**: Vibrant, animated design with glassmorphism effects.
+- **Interactive Elements**: Custom animations (fade-in, float, blob) and hover effects.
+- **Responsive Design**: Fully responsive layout for all device sizes.
+- **Accessibility**: High contrast text and clear visual hierarchy.
 
 ### 🔧 AI Implementation
 
@@ -208,7 +231,9 @@ POST /api/documentation/:id/export      # Export
 
 ### Frontend
 - **Next.js**: SSR capabilities, routing, optimization
-- **Tailwind**: Rapid UI development, consistent styling
+- **Tailwind CSS**: Rapid UI development, consistent styling
+- **Custom Animations**: Keyframe animations for engaging user experience
+- **Glassmorphism**: Modern UI aesthetic using backdrop filters
 - **Context API**: Simple state management
 - **Axios**: Clean API client with interceptors
 

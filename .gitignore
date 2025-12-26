@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Uploads folder (user uploaded files)
+backend/src/uploads/
+uploads/
+
+# Documentation (video scripts, blueprints)
+docs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+.next/
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test files
+*.mp4
+*.mp3
